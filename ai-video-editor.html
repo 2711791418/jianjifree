@@ -1,0 +1,3009 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 电影解说视频生成器</title>
+    <style>
+        :root {
+            --bg: #0f0f0f;
+            --surface: #1a1a1a;
+            --surface2: #242424;
+            --border: #333;
+            --text: #e0e0e0;
+            --text2: #999;
+            --accent: #ff6b35;
+            --accent2: #ff8c5a;
+            --green: #4caf84;
+            --blue: #5b9bd5;
+            --red: #e05555;
+            --gold: #f0c060;
+            --radius: 10px;
+            --shadow: 0 4px 24px rgba(0,0,0,0.4);
+            --transition: 0.25s ease;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            line-height: 1.6;
+        }
+
+        /* ========== 顶部导航 ========== */
+        .navbar {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 0 28px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+            z-index: 100;
+        }
+        .navbar .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--accent);
+            letter-spacing: 0.5px;
+        }
+        .navbar .logo .icon { font-size: 28px; }
+        .navbar .nav-links { display: flex; gap: 6px; align-items: center; }
+        .navbar .nav-links a {
+            color: var(--text2);
+            text-decoration: none;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 14px;
+            transition: var(--transition);
+            cursor: pointer;
+        }
+        .navbar .nav-links a:hover { color: var(--text); background: var(--surface2); }
+        .navbar .admin-link {
+            color: var(--text2) !important;
+            font-size: 13px !important;
+            opacity: 0.5;
+        }
+
+        /* ========== 主布局 ========== */
+        .main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        .content-wrapper {
+            flex: 1;
+            display: flex;
+            gap: 24px;
+            padding: 24px 28px;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        /* ========== 左侧主区域 ========== */
+        .main-panel {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* ========== 右侧设置面板 ========== */
+        .settings-panel {
+            width: 300px;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        /* ========== 卡片 ========== */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px 24px;
+            box-shadow: var(--shadow);
+        }
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .card-title .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent);
+        }
+
+        /* ========== 上传区域 ========== */
+        .upload-zone {
+            border: 2px dashed var(--border);
+            border-radius: var(--radius);
+            padding: 36px 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: var(--transition);
+            background: var(--surface);
+            position: relative;
+        }
+        .upload-zone:hover { border-color: var(--accent); background: #1a1a18; }
+        .upload-zone.drag-over { border-color: var(--accent); background: #1e1a16; }
+        .upload-zone .upload-icon { font-size: 48px; margin-bottom: 10px; }
+        .upload-zone .upload-text { font-size: 15px; color: var(--text); }
+        .upload-zone .upload-hint { font-size: 13px; color: var(--text2); margin-top: 6px; }
+        .upload-zone input[type="file"] { display: none; }
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 12px;
+            padding: 10px 16px;
+            background: var(--surface2);
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        .file-info .remove-btn {
+            margin-left: auto;
+            background: none;
+            border: none;
+            color: var(--red);
+            cursor: pointer;
+            font-size: 18px;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+        .file-info .remove-btn:hover { background: #3a2020; }
+
+        /* ========== 模式选择 ========== */
+        .mode-tabs {
+            display: flex;
+            gap: 4px;
+            background: var(--surface2);
+            border-radius: 25px;
+            padding: 4px;
+        }
+        .mode-tab {
+            flex: 1;
+            padding: 10px 20px;
+            border: none;
+            background: transparent;
+            color: var(--text2);
+            border-radius: 22px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: var(--transition);
+            white-space: nowrap;
+        }
+        .mode-tab.active {
+            background: var(--accent);
+            color: #fff;
+        }
+        .mode-tab:hover:not(.active) { color: var(--text); }
+
+        /* ========== 文案区域 ========== */
+        .copywriting-area {
+            width: 100%;
+            min-height: 160px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--text);
+            padding: 16px;
+            font-size: 14px;
+            font-family: inherit;
+            resize: vertical;
+            line-height: 1.8;
+            transition: var(--transition);
+        }
+        .copywriting-area:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(255,107,53,0.1);
+        }
+        .copywriting-area:read-only {
+            background: var(--surface);
+            cursor: default;
+        }
+        .char-count {
+            text-align: right;
+            font-size: 12px;
+            color: var(--text2);
+            margin-top: 6px;
+        }
+
+        /* ========== 按钮 ========== */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 22px;
+            border: none;
+            border-radius: 25px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            font-family: inherit;
+        }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { background: var(--accent2); transform: translateY(-1px); box-shadow: 0 4px 16px rgba(255,107,53,0.3); }
+        .btn-primary:disabled { background: #555; color: #999; cursor: not-allowed; transform: none; box-shadow: none; }
+        .btn-outline { background: transparent; border: 1.5px solid var(--border); color: var(--text); }
+        .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+        .btn-redo { background: transparent; border: 1.5px solid var(--gold); color: var(--gold); }
+        .btn-redo:hover { background: rgba(240,192,96,0.1); }
+        .btn-green { background: var(--green); color: #fff; }
+        .btn-green:hover { filter: brightness(1.15); }
+        .btn-sm { padding: 6px 14px; font-size: 12px; }
+        .btn-group { display: flex; gap: 10px; flex-wrap: wrap; }
+
+        /* ========== 进度条 ========== */
+        .progress-container { margin-top: 16px; }
+        .progress-bar-wrap {
+            background: var(--surface2);
+            border-radius: 20px;
+            height: 8px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), var(--accent2));
+            border-radius: 20px;
+            transition: width 0.4s ease;
+            width: 0%;
+        }
+        .progress-text { font-size: 13px; color: var(--text2); }
+        .progress-steps {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--text2);
+        }
+        .progress-steps .step { text-align: center; flex: 1; }
+        .progress-steps .step.done { color: var(--green); }
+        .progress-steps .step.active { color: var(--accent); font-weight: 600; }
+
+        /* ========== 结果预览 ========== */
+        .result-box {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            margin-top: 12px;
+            display: none;
+        }
+        .result-box.show { display: block; animation: fadeIn 0.4s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+        .generated-copy {
+            white-space: pre-wrap;
+            line-height: 1.9;
+            font-size: 14px;
+            padding: 12px;
+            background: var(--surface);
+            border-radius: 8px;
+            border-left: 3px solid var(--accent);
+            margin-bottom: 14px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        /* ========== 设置面板内容 ========== */
+        .setting-row {
+            margin-bottom: 14px;
+        }
+        .setting-label {
+            font-size: 13px;
+            color: var(--text2);
+            margin-bottom: 6px;
+            display: block;
+        }
+        .setting-select, .setting-input {
+            width: 100%;
+            padding: 9px 12px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 14px;
+            font-family: inherit;
+            transition: var(--transition);
+        }
+        .setting-select:focus, .setting-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        .color-presets {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-top: 6px;
+        }
+        .color-dot {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: var(--transition);
+        }
+        .color-dot:hover { transform: scale(1.15); }
+        .color-dot.selected { border-color: #fff; box-shadow: 0 0 10px currentColor; }
+
+        /* ========== 底部广告栏 ========== */
+        .ad-bar {
+            height: calc(100vh / 6);
+            min-height: 100px;
+            max-height: 200px;
+            background: var(--surface);
+            border-top: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            position: relative;
+            overflow: hidden;
+            cursor: pointer;
+        }
+        .ad-bar img {
+            max-height: 100%;
+            max-width: 100%;
+            object-fit: contain;
+        }
+        .ad-bar .ad-placeholder {
+            color: var(--text2);
+            font-size: 14px;
+            text-align: center;
+            opacity: 0.5;
+        }
+        .ad-bar .ad-label {
+            position: absolute;
+            top: 4px;
+            right: 10px;
+            font-size: 10px;
+            color: var(--text2);
+            opacity: 0.4;
+            pointer-events: none;
+        }
+
+        /* ========== Toast ========== */
+        .toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 14px;
+            z-index: 9999;
+            animation: slideDown 0.35s ease;
+            pointer-events: none;
+            box-shadow: var(--shadow);
+        }
+        @keyframes slideDown { from { opacity: 0; transform: translateX(-50%) translateY(-20px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+        .toast.success { border-color: var(--green); color: var(--green); }
+        .toast.error { border-color: var(--red); color: var(--red); }
+
+        /* ========== 管理后台 ========== */
+        .admin-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.85);
+            z-index: 1000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+        }
+        .admin-overlay.show { display: flex; }
+        .admin-dialog {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            width: 700px;
+            max-width: 95vw;
+            max-height: 85vh;
+            overflow-y: auto;
+            padding: 28px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+            animation: fadeIn 0.3s ease;
+        }
+        .admin-dialog h2 {
+            font-size: 22px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .admin-dialog .subtitle { color: var(--text2); font-size: 13px; margin-bottom: 20px; }
+        .admin-section {
+            margin-bottom: 24px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+        .admin-section:last-child { border-bottom: none; margin-bottom: 0; }
+        .admin-section h3 { font-size: 16px; margin-bottom: 12px; color: var(--accent); }
+        .admin-row { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+        .admin-row input, .admin-row select {
+            padding: 8px 12px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 13px;
+            font-family: inherit;
+        }
+        .admin-row input:focus, .admin-row select:focus { outline: none; border-color: var(--accent); }
+        .admin-row input { flex: 1; min-width: 120px; }
+        .voice-list, .ad-list {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+        .list-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            background: var(--surface2);
+            border-radius: 6px;
+            margin-bottom: 6px;
+            font-size: 13px;
+        }
+        .list-item .actions { display: flex; gap: 6px; }
+        .list-item .actions button {
+            background: none;
+            border: none;
+            color: var(--text2);
+            cursor: pointer;
+            font-size: 16px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            transition: var(--transition);
+        }
+        .list-item .actions button:hover { color: var(--red); background: #3a2020; }
+        .admin-close {
+            position: sticky;
+            top: 0;
+            float: right;
+            background: none;
+            border: none;
+            color: var(--text2);
+            font-size: 24px;
+            cursor: pointer;
+            padding: 4px 10px;
+            border-radius: 6px;
+            transition: var(--transition);
+        }
+        .admin-close:hover { color: var(--text); background: var(--surface2); }
+
+        /* 密码输入弹窗 */
+        .pwd-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.85);
+            z-index: 1001;
+            display: none;
+            justify-content: center;
+            align-items: center;
+        }
+        .pwd-overlay.show { display: flex; }
+        .pwd-dialog {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 32px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+            animation: fadeIn 0.3s ease;
+        }
+        .pwd-dialog h3 { margin-bottom: 16px; }
+        .pwd-dialog input {
+            padding: 10px 16px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 15px;
+            width: 250px;
+            text-align: center;
+            font-family: inherit;
+        }
+        .pwd-dialog input:focus { outline: none; border-color: var(--accent); }
+        .pwd-dialog .btn { margin-top: 14px; }
+
+        /* ========== 响应式 ========== */
+        @media (max-width: 900px) {
+            .content-wrapper { flex-direction: column; padding: 16px; }
+            .settings-panel { width: 100%; }
+            .mode-tab { font-size: 12px; padding: 8px 12px; }
+            .navbar { padding: 0 14px; }
+            .admin-dialog { width: 100%; padding: 16px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ==================== 顶部导航 ==================== -->
+    <nav class="navbar">
+        <div class="logo">
+            <span class="icon">🎬</span>
+            <span>AI 电影解说生成器</span>
+        </div>
+        <div class="nav-links">
+            <a onclick="showAdminPassword()" class="admin-link">🔧 后台管理</a>
+        </div>
+    </nav>
+
+    <!-- ==================== 主内容区 ==================== -->
+    <div class="main-container">
+        <div class="content-wrapper">
+
+            <!-- 左侧主面板 -->
+            <div class="main-panel">
+                <!-- 上传区域 -->
+                <div class="card">
+                    <div class="card-title"><span class="dot"></span>📁 上传电影文件</div>
+                    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+                        <div class="upload-icon">⬆️</div>
+                        <div class="upload-text">点击上传或拖拽电影文件到此处</div>
+                        <div class="upload-hint">支持 MP4 / MOV / AVI / MKV 格式（最大 2GB）</div>
+                        <input type="file" id="fileInput" accept="video/*" onchange="handleFileSelect(event)">
+                    </div>
+                    <div class="file-info" id="fileInfo" style="display:none;">
+                        <span>🎥</span>
+                        <span id="fileName"></span>
+                        <span style="color:var(--text2);font-size:12px;" id="fileSize"></span>
+                        <button class="remove-btn" onclick="removeFile()" title="移除">✕</button>
+                    </div>
+                </div>
+
+                <!-- 模式选择 -->
+                <div class="card">
+                    <div class="card-title"><span class="dot"></span>📝 选择制作模式</div>
+                    <div class="mode-tabs">
+                        <button class="mode-tab active" id="tabModeA" onclick="switchMode('A')">✍️ 自己提供文案 → AI 剪辑</button>
+                        <button class="mode-tab" id="tabModeB" onclick="switchMode('B')">🤖 AI 自动生成文案 → 剪辑</button>
+                    </div>
+
+                    <!-- 模式 A：自己写文案 -->
+                    <div id="modeAContent" style="margin-top:16px;">
+                        <textarea class="copywriting-area" id="userCopywriting" placeholder="在此输入你的电影解说文案...&#10;&#10;例如：这部电影讲述了一个关于勇气与牺牲的故事。主角在命运的十字路口做出了改变一生的选择..."></textarea>
+                        <div class="char-count"><span id="charCount">0</span> 字</div>
+                        <div class="btn-group" style="margin-top:14px;">
+                            <button class="btn btn-primary" id="btnModeA" onclick="startEditModeA()" disabled>🎬 开始 AI 剪辑</button>
+                        </div>
+                    </div>
+
+                    <!-- 模式 B：AI 自动生成 -->
+                    <div id="modeBContent" style="margin-top:16px; display:none;">
+                        <!-- 第一步：生成文案 -->
+                        <div id="stepB1">
+                            <p style="color:var(--text2);font-size:13px;margin-bottom:10px;">
+                                📌 <b>第一步：</b>AI 将根据你的电影自动生成解说文案，生成后可修改或重新生成
+                            </p>
+                            <div class="admin-row" style="margin-bottom:10px;">
+                                <label style="font-size:13px;white-space:nowrap;">🤖 AI 引擎：</label>
+                                <select id="aiEngineSelect" style="padding:6px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;font-family:inherit;flex:1;min-width:130px;">
+                                    <option value="builtin">📦 内置模拟引擎</option>
+                                </select>
+                                <span style="font-size:11px;color:var(--text2);">💡 在后台配置真实AI</span>
+                            </div>
+                            <div class="admin-row" style="margin-bottom:12px;">
+                                <label style="font-size:13px;white-space:nowrap;">📏 目标字数：</label>
+                                <input type="number" id="targetWordCount" value="800" min="200" max="10000" step="100" style="width:110px;text-align:center;" oninput="this.value=Math.max(200,Math.min(10000,parseInt(this.value)||200))">
+                                <span style="font-size:12px;color:var(--text2);">字（200 ~ 10000）</span>
+                                <span style="font-size:12px;color:var(--text2);margin-left:4px;">💡 数值越大生成越久</span>
+                            </div>
+                            <div style="margin-bottom:12px;">
+                                <div style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;" onclick="toggleStylePanel()">
+                                    <span style="font-size:13px;color:var(--text2);">✒️ 模仿写作风格</span>
+                                    <span style="font-size:11px;color:var(--text2);opacity:0.6;">（可选，粘贴样本文本让 AI 模仿你的风格）</span>
+                                    <span id="styleArrow" style="color:var(--text2);transition:0.25s;">▶</span>
+                                </div>
+                                <div id="stylePanel" style="display:none;margin-top:8px;">
+                                    <textarea class="copywriting-area" id="styleSample" placeholder="在此粘贴你想要模仿的文案风格样本...&#10;&#10;例如：你可以粘贴你自己写的某篇电影解说文案，AI 将分析你的行文风格（句子长度、语气、用词习惯等）并模仿生成。&#10;&#10;留空则不模仿，使用默认风格。" style="min-height:90px;font-size:13px;"></textarea>
+                                    <div style="font-size:11px;color:var(--text2);margin-top:4px;">
+                                        💡 AI 会分析：句子长度 | 是否使用 emoji | 口语化程度 | 段落密度 | 语气词使用
+                                    </div>
+                                </div>
+                            </div>
+                            <button class="btn btn-primary" id="btnGenerateCopy" onclick="generateCopywriting()" disabled>🤖 生成 AI 文案</button>
+                            <button class="btn btn-redo btn-sm" id="btnRegenerateCopy" onclick="generateCopywriting()" style="display:none;margin-left:8px;">🔄 不满意？重新生成</button>
+
+                            <!-- 文案结果显示 -->
+                            <div class="result-box" id="generatedCopyBox">
+                                <div style="font-size:13px;color:var(--green);margin-bottom:8px;">✅ AI 已生成以下文案：</div>
+                                <div class="generated-copy" id="generatedCopyText"></div>
+                                <div class="btn-group">
+                                    <button class="btn btn-green" onclick="confirmCopyAndEdit()">✅ 确认文案，开始剪辑</button>
+                                    <button class="btn btn-redo" onclick="generateCopywriting()">🔄 不满意，重新生成</button>
+                                    <button class="btn btn-outline btn-sm" onclick="editGeneratedCopy()">✏️ 手动修改文案</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 剪辑进度与状态 -->
+                <div class="card" id="progressCard" style="display:none;">
+                    <div class="card-title"><span class="dot" style="background:var(--accent);"></span>🎬 AI 剪辑进度</div>
+                    <div class="progress-bar-wrap">
+                        <div class="progress-bar-fill" id="progressBar"></div>
+                    </div>
+                    <div class="progress-text" id="progressText">准备中...</div>
+                    <div class="progress-steps">
+                        <div class="step" id="step1">提取画面</div>
+                        <div class="step" id="step2">AI识图</div>
+                        <div class="step" id="step3">匹配文案</div>
+                        <div class="step" id="step4">合成配音</div>
+                        <div class="step" id="step5">渲染输出</div>
+                    </div>
+                    <!-- AI 画面分析日志 -->
+                    <div id="visionLog" style="margin-top:10px;max-height:160px;overflow-y:auto;font-size:11px;color:var(--text2);display:none;background:var(--surface2);border-radius:8px;padding:10px;line-height:1.7;"></div>
+                    <!-- 剪辑时间线 -->
+                    <div id="editTimeline" style="margin-top:14px;display:none;">
+                        <div style="font-size:13px;font-weight:600;margin-bottom:8px;color:var(--accent);">📋 智能匹配时间线</div>
+                        <div style="font-size:11px;color:var(--text2);margin-bottom:8px;">AI 已将文案段落与视频画面自动匹配，每条对应一个视频片段</div>
+                        <div id="timelineItems" style="display:flex;flex-direction:column;gap:6px;max-height:300px;overflow-y:auto;"></div>
+                    </div>
+                    <div class="btn-group" style="margin-top:14px;">
+                        <button class="btn btn-redo btn-sm" id="btnRedoEdit" onclick="redoEdit()" style="display:none;">🔄 不满意，重新剪辑</button>
+                    </div>
+                </div>
+
+                <!-- 完成结果 -->
+                <div class="card result-box" id="completeBox">
+                    <div style="text-align:center;padding:20px;">
+                        <div style="font-size:48px;">🎉</div>
+                        <div style="font-size:18px;font-weight:600;margin:10px 0;">视频生成完成！</div>
+                        <div style="color:var(--text2);font-size:14px;">你的电影解说视频已经制作完成</div>
+                        <div class="btn-group" style="margin-top:16px;justify-content:center;">
+                            <button class="btn btn-primary" onclick="downloadVideo()">⬇️ 下载视频</button>
+                            <button class="btn btn-outline" onclick="previewVideo()">👁️ 预览视频</button>
+                            <button class="btn btn-redo btn-sm" onclick="redoEdit()">🔄 重新剪辑</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧设置面板 -->
+            <div class="settings-panel">
+                <!-- 字幕设置 -->
+                <div class="card">
+                    <div class="card-title"><span class="dot"></span>💬 字幕设置</div>
+                    <div class="setting-row">
+                        <label class="setting-label">字幕字号</label>
+                        <input type="range" class="setting-input" id="subtitleSize" min="14" max="48" value="24" oninput="updateSubtitlePreview()" style="width:100%;">
+                        <span style="font-size:12px;color:var(--text2);">当前：<span id="subtitleSizeVal">24</span>px</span>
+                    </div>
+                    <div class="setting-row">
+                        <label class="setting-label">字体颜色</label>
+                        <div class="color-presets" id="subtitleColorPresets">
+                            <span class="color-dot selected" style="background:#ffffff;" data-color="#ffffff" onclick="selectSubtitleColor(this)"></span>
+                            <span class="color-dot" style="background:#ffeb3b;" data-color="#ffeb3b" onclick="selectSubtitleColor(this)"></span>
+                            <span class="color-dot" style="background:#00e5ff;" data-color="#00e5ff" onclick="selectSubtitleColor(this)"></span>
+                            <span class="color-dot" style="background:#76ff03;" data-color="#76ff03" onclick="selectSubtitleColor(this)"></span>
+                            <span class="color-dot" style="background:#ff6e6e;" data-color="#ff6e6e" onclick="selectSubtitleColor(this)"></span>
+                            <span class="color-dot" style="background:#e0e0e0;" data-color="#e0e0e0" onclick="selectSubtitleColor(this)"></span>
+                            <span class="color-dot" style="background:#ff9100;" data-color="#ff9100" onclick="selectSubtitleColor(this)"></span>
+                            <span class="color-dot" style="background:#b388ff;" data-color="#b388ff" onclick="selectSubtitleColor(this)"></span>
+                        </div>
+                        <input type="color" class="setting-input" id="subtitleColorCustom" value="#ffffff" onchange="selectCustomSubtitleColor()" style="margin-top:6px;height:32px;padding:2px 6px;">
+                    </div>
+                    <div class="setting-row">
+                        <label class="setting-label">字体样式</label>
+                        <select class="setting-select" id="subtitleFont" onchange="updateSubtitlePreview()">
+                            <option value="'PingFang SC','Microsoft YaHei',sans-serif">默认字体（黑体风格）</option>
+                            <option value="'SimSun','STSong',serif">宋体</option>
+                            <option value="'KaiTi','STKaiti',serif">楷体</option>
+                            <option value="'FangSong','STFangsong',serif">仿宋</option>
+                            <option value="'Comic Sans MS','YouYuan',cursive">圆体/卡通</option>
+                            <option value="'Impact','Arial Black',sans-serif">粗体/强调</option>
+                        </select>
+                    </div>
+                    <div class="setting-row">
+                        <label class="setting-label">字幕描边</label>
+                        <select class="setting-select" id="subtitleStroke">
+                            <option value="none">无描边</option>
+                            <option value="1px #000">细黑边</option>
+                            <option value="2px #000" selected>标准黑边</option>
+                            <option value="3px #000">粗黑边</option>
+                            <option value="1px #333">细灰边</option>
+                        </select>
+                    </div>
+                    <div class="setting-row">
+                        <label class="setting-label">字幕背景</label>
+                        <select class="setting-select" id="subtitleBg">
+                            <option value="none" selected>无背景（透明）</option>
+                            <option value="rgba(0,0,0,0.5)">半透明黑色</option>
+                            <option value="rgba(0,0,0,0.8)">深黑色</option>
+                            <option value="rgba(255,255,255,0.15)">半透明白色</option>
+                        </select>
+                    </div>
+                    <!-- 字幕预览 -->
+                    <div style="margin-top:10px;padding:16px 10px;background:var(--bg);border-radius:8px;text-align:center;">
+                        <span style="font-size:11px;color:var(--text2);display:block;margin-bottom:4px;">字幕预览</span>
+                        <span id="subtitlePreview" style="display:inline-block;padding:2px 8px;font-size:24px;color:#ffffff;text-shadow:2px 2px 0 #000;font-family:'PingFang SC','Microsoft YaHei',sans-serif;">这是一段字幕预览</span>
+                    </div>
+                </div>
+
+                <!-- 配音设置 -->
+                <div class="card">
+                    <div class="card-title"><span class="dot"></span>🔊 配音设置</div>
+                    <div class="setting-row">
+                        <label class="setting-label">配音音色</label>
+                        <select class="setting-select" id="voiceSelect">
+                            <!-- 动态填充 -->
+                        </select>
+                    </div>
+                    <!-- 上传示例音频模仿声音 -->
+                    <div class="setting-row" style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:14px;">
+                        <label class="setting-label" style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                            🎙️ 上传音频模仿声音语调
+                            <span style="font-size:11px;color:var(--text2);font-weight:400;">（可选）</span>
+                        </label>
+                        <div style="display:flex;gap:8px;align-items:center;margin-top:6px;">
+                            <input type="file" id="audioSampleInput" accept="audio/*" onchange="handleAudioSample(event)" style="display:none;">
+                            <button class="btn btn-outline btn-sm" onclick="document.getElementById('audioSampleInput').click()" style="flex:1;font-size:12px;">
+                                📁 选择音频文件
+                            </button>
+                            <button class="btn btn-sm" id="btnAnalyzeAudio" onclick="analyzeAudioSample()" disabled style="font-size:12px;background:var(--blue);color:#fff;display:none;">
+                                🔍 分析
+                            </button>
+                        </div>
+                        <div id="audioFileInfo" style="font-size:11px;color:var(--green);margin-top:6px;display:none;"></div>
+                        <div id="audioAnalysisResult" style="font-size:11px;color:var(--text2);margin-top:4px;display:none;line-height:1.7;"></div>
+                        <div style="margin-top:6px;display:none;" id="audioImitationBar">
+                            <span style="font-size:11px;color:var(--gold);">✨ 已分析 — 试听时将模仿音频特征</span>
+                            <button class="btn btn-sm" onclick="clearAudioSample()" style="font-size:10px;margin-left:8px;background:none;border:1px solid var(--border);color:var(--red);border-radius:4px;cursor:pointer;padding:2px 8px;">清除</button>
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <label class="setting-label">语速</label>
+                        <input type="range" class="setting-input" id="voiceRate" min="0.5" max="2" step="0.1" value="1" style="width:100%;">
+                        <span style="font-size:12px;color:var(--text2);">当前：<span id="voiceRateVal">1.0</span>x</span>
+                    </div>
+                    <div class="setting-row">
+                        <label class="setting-label">音调</label>
+                        <input type="range" class="setting-input" id="voicePitch" min="0.5" max="2" step="0.05" value="1" style="width:100%;">
+                        <span style="font-size:12px;color:var(--text2);">当前：<span id="voicePitchVal">1.0</span>x</span>
+                    </div>
+                    <div class="setting-row">
+                        <label class="setting-label">音量</label>
+                        <input type="range" class="setting-input" id="voiceVolume" min="0.1" max="1" step="0.1" value="0.9" style="width:100%;">
+                        <span style="font-size:12px;color:var(--text2);">当前：<span id="voiceVolumeVal">90</span>%</span>
+                    </div>
+                    <button class="btn btn-outline btn-sm" onclick="previewVoice()" style="width:100%;margin-top:6px;">🔊 试听配音</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 底部广告栏 ==================== -->
+    <div class="ad-bar" id="adBar" onclick="clickAd()" title="广告">
+        <span class="ad-label">广告</span>
+        <div class="ad-placeholder" id="adPlaceholder">
+            🧑‍💼 此处为广告位 — 可在后台管理更换广告图片与链接
+        </div>
+        <img id="adImage" style="display:none;" alt="广告">
+    </div>
+
+    <!-- ==================== 管理员密码弹窗 ==================== -->
+    <div class="pwd-overlay" id="pwdOverlay">
+        <div class="pwd-dialog">
+            <h3>🔐 请输入管理密码</h3>
+            <input type="password" id="adminPasswordInput" placeholder="输入后台管理密码" onkeydown="if(event.key==='Enter')verifyAdminPassword()">
+            <br>
+            <button class="btn btn-primary" onclick="verifyAdminPassword()">确认进入</button>
+            <button class="btn btn-outline btn-sm" onclick="closeAdminPassword()" style="margin-left:6px;">取消</button>
+            <div style="margin-top:8px;font-size:11px;color:var(--text2);">默认密码：admin888</div>
+        </div>
+    </div>
+
+    <!-- ==================== 管理后台弹窗 ==================== -->
+    <div class="admin-overlay" id="adminOverlay">
+        <div class="admin-dialog">
+            <button class="admin-close" onclick="closeAdmin()">✕</button>
+            <h2>⚙️ 后台管理</h2>
+            <p class="subtitle">管理配音音色、字幕样式预设与广告内容（此页面不对普通用户开放）</p>
+
+            <!-- 配音音色管理 -->
+            <div class="admin-section">
+                <h3>🎤 配音音色管理</h3>
+                <p style="font-size:12px;color:var(--text2);margin-bottom:10px;">添加/删除可选的 TTS 配音音色</p>
+                <div class="admin-row">
+                    <input type="text" id="newVoiceName" placeholder="音色名称（如：温柔女声）">
+                    <input type="text" id="newVoiceLang" placeholder="语言代码（如：zh-CN）" value="zh-CN">
+                    <button class="btn btn-primary btn-sm" onclick="addVoice()">➕ 添加</button>
+                </div>
+                <div class="voice-list" id="voiceList"></div>
+                <p style="font-size:11px;color:var(--text2);margin-top:6px;">💡 音色实际效果取决于浏览器语音引擎。系统内置音色无法删除。</p>
+            </div>
+
+            <!-- 字幕样式预设管理 -->
+            <div class="admin-section">
+                <h3>🎨 字幕样式预设管理</h3>
+                <p style="font-size:12px;color:var(--text2);margin-bottom:10px;">保存当前字幕设置为预设，或删除已有预设</p>
+                <div class="admin-row">
+                    <input type="text" id="newPresetName" placeholder="预设名称（如：电影风格）">
+                    <button class="btn btn-primary btn-sm" onclick="saveCurrentPreset()">💾 保存当前设置为预设</button>
+                </div>
+                <div class="voice-list" id="presetList"></div>
+            </div>
+
+            <!-- AI 文案引擎配置 -->
+            <div class="admin-section">
+                <h3>🤖 AI 文案引擎配置</h3>
+                <p style="font-size:12px;color:var(--text2);margin-bottom:10px;">配置大模型 API 以用于文案生成与风格模仿。未配置则使用内置模拟生成。</p>
+                <div class="admin-row">
+                    <label style="font-size:13px;white-space:nowrap;">选择引擎：</label>
+                    <select id="aiProviderSelect" onchange="onAIProviderChange()" style="padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;font-family:inherit;flex:1;min-width:150px;">
+                        <option value="deepseek">DeepSeek（深度求索）</option>
+                        <option value="doubao">豆包（字节跳动）</option>
+                        <option value="qianwen">通义千问（阿里）</option>
+                        <option value="yuanbao">元宝（腾讯混元）</option>
+                        <option value="custom">自定义 OpenAI 兼容接口</option>
+                    </select>
+                </div>
+                <div class="admin-row">
+                    <label style="font-size:13px;white-space:nowrap;">API Key：</label>
+                    <input type="password" id="aiApiKey" placeholder="输入 API Key（加密存储于本地浏览器）">
+                </div>
+                <div class="admin-row">
+                    <label style="font-size:13px;white-space:nowrap;">接口地址：</label>
+                    <input type="text" id="aiEndpoint" placeholder="https://api.deepseek.com/chat/completions">
+                </div>
+                <div class="admin-row">
+                    <label style="font-size:13px;white-space:nowrap;">模型名：</label>
+                    <input type="text" id="aiModel" placeholder="deepseek-chat">
+                </div>
+                <div style="margin-top:10px;display:flex;gap:10px;align-items:center;">
+                    <button class="btn btn-primary btn-sm" onclick="saveAIConfig()">💾 保存 AI 配置</button>
+                    <button class="btn btn-outline btn-sm" onclick="testAIConnection()">🔌 测试连接</button>
+                    <span id="aiTestResult" style="font-size:12px;"></span>
+                </div>
+                <p style="font-size:11px;color:var(--text2);margin-top:8px;">
+                    💡 API Key 仅保存在你的浏览器本地，不会上传到任何服务器。
+                    各引擎默认端点已预填，切换引擎自动更新。选择"自定义"可接入任意 OpenAI 兼容接口。
+                </p>
+            </div>
+
+            <!-- AI 视觉引擎配置（视频画面分析） -->
+            <div class="admin-section">
+                <h3>👁️ AI 视觉引擎配置（视频画面分析）</h3>
+                <p style="font-size:12px;color:var(--text2);margin-bottom:10px;">配置多模态视觉模型以分析视频画面内容。未配置则使用关键词匹配。</p>
+                <div class="admin-row">
+                    <label style="font-size:13px;white-space:nowrap;">视觉引擎：</label>
+                    <select id="visionProviderSelect" onchange="onVisionProviderChange()" style="padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;font-family:inherit;flex:1;min-width:150px;">
+                        <option value="qianwen">通义千问 VL（阿里）</option>
+                        <option value="deepseek">DeepSeek VL（深度求索）</option>
+                        <option value="doubao">豆包 Vision（字节）</option>
+                        <option value="openai">GPT-4o（OpenAI）</option>
+                        <option value="custom">自定义多模态接口</option>
+                    </select>
+                </div>
+                <div class="admin-row">
+                    <label style="font-size:13px;white-space:nowrap;">视觉 API Key：</label>
+                    <input type="password" id="visionApiKey" placeholder="视觉模型 API Key（可复用文案引擎 Key）">
+                </div>
+                <div class="admin-row">
+                    <label style="font-size:13px;white-space:nowrap;">接口地址：</label>
+                    <input type="text" id="visionEndpoint" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions">
+                </div>
+                <div class="admin-row">
+                    <label style="font-size:13px;white-space:nowrap;">视觉模型名：</label>
+                    <input type="text" id="visionModel" placeholder="qwen-vl-plus">
+                </div>
+                <div class="admin-row">
+                    <label style="font-size:13px;white-space:nowrap;">采样间隔：</label>
+                    <input type="number" id="frameInterval" value="8" min="3" max="30" step="1" style="width:80px;text-align:center;">
+                    <span style="font-size:12px;color:var(--text2);">秒（每隔N秒提取一帧分析）</span>
+                </div>
+                <div style="margin-top:10px;display:flex;gap:10px;align-items:center;">
+                    <button class="btn btn-primary btn-sm" onclick="saveVisionConfig()">💾 保存视觉配置</button>
+                    <button class="btn btn-outline btn-sm" onclick="testVisionConnection()">🔌 测试视觉连接</button>
+                    <span id="visionTestResult" style="font-size:12px;"></span>
+                </div>
+                <p style="font-size:11px;color:var(--text2);margin-top:8px;">
+                    💡 视觉模型用于理解视频每一帧的画面内容（人物、场景、动作、情绪等），
+                    从而实现文案与视频画面的智能匹配。不配置则使用基于时间的关键词模糊匹配。推荐使用通义千问 VL 或 GPT-4o。
+                </p>
+            </div>
+
+            <!-- 广告管理 -->
+            <div class="admin-section">
+                <h3>📢 广告管理</h3>
+                <p style="font-size:12px;color:var(--text2);margin-bottom:10px;">更换底部广告栏的图片与点击链接</p>
+                <div class="admin-row">
+                    <label style="font-size:13px;">广告图片URL：</label>
+                    <input type="text" id="adImageUrl" placeholder="https://example.com/ad.jpg">
+                </div>
+                <div class="admin-row">
+                    <label style="font-size:13px;">点击跳转链接：</label>
+                    <input type="text" id="adLinkUrl" placeholder="https://example.com">
+                </div>
+                <div class="admin-row">
+                    <label style="font-size:13px;">或上传本地图片：</label>
+                    <input type="file" id="adImageFile" accept="image/*" onchange="handleAdImageUpload(event)">
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="saveAdSettings()">💾 保存广告设置</button>
+                <button class="btn btn-outline btn-sm" onclick="clearAd()" style="margin-left:6px;">🗑️ 清除广告</button>
+            </div>
+
+            <!-- 重置 -->
+            <div style="margin-top:16px;text-align:center;padding-top:16px;border-top:1px solid var(--border);">
+                <button class="btn btn-outline btn-sm" onclick="resetAllSettings()" style="color:var(--red);border-color:var(--red);">⚠️ 恢复全部默认设置</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== Toast 容器 ==================== -->
+    <div id="toastContainer"></div>
+
+    <script>
+        // ==================== 全局状态 ====================
+        const APP_STATE = {
+            currentMode: 'A',           // 'A' 或 'B'
+            uploadedFile: null,
+            generatedCopy: '',          // AI 生成的文案（模式B）
+            isEditing: false,           // 是否正在剪辑
+            editCompleted: false,       // 剪辑是否完成
+            editProgress: 0,
+            currentSubtitleColor: '#ffffff',
+            currentSubtitleSize: 24,
+            currentSubtitleFont: "'PingFang SC','Microsoft YaHei',sans-serif",
+            currentSubtitleStroke: '2px #000',
+            currentSubtitleBg: 'none',
+            currentVoice: '',
+            currentVoiceRate: 1,
+            currentVoicePitch: 1,
+            currentVoiceVolume: 0.9,
+            audioSample: null,          // 上传的音频文件
+            audioAnalysis: null,        // 分析结果 { avgPitch, speechRate, avgVolume, duration }
+        };
+
+        // 管理密码（可在此修改）
+        const ADMIN_PASSWORD = 'admin888';
+
+        // ==================== 默认设置 ====================
+        const DEFAULT_VOICES = [
+            { name: '温柔女声（中文）', lang: 'zh-CN', builtin: true },
+            { name: '标准男声（中文）', lang: 'zh-CN', builtin: true },
+            { name: '活泼女声（中文）', lang: 'zh-CN', builtin: true },
+            { name: '沉稳男声（英文）', lang: 'en-US', builtin: true },
+            { name: '优雅女声（英文）', lang: 'en-GB', builtin: true },
+        ];
+
+        const DEFAULT_PRESETS = [
+            { name: '经典电影风格', size: 26, color: '#ffffff', font: "'PingFang SC','Microsoft YaHei',sans-serif", stroke: '2px #000', bg: 'none' },
+            { name: '综艺风格', size: 20, color: '#ffeb3b', font: "'Comic Sans MS','YouYuan',cursive", stroke: '1px #000', bg: 'rgba(0,0,0,0.5)' },
+            { name: '科技风格', size: 22, color: '#00e5ff', font: "'PingFang SC','Microsoft YaHei',sans-serif", stroke: '1px #333', bg: 'rgba(0,0,0,0.8)' },
+        ];
+
+        const DEFAULT_AD = {
+            imageUrl: '',
+            linkUrl: '',
+            imageData: '', // base64
+        };
+
+        // ==================== 数据加载/保存 ====================
+        function loadData(key, fallback) {
+            try {
+                const raw = localStorage.getItem('ai_video_editor_' + key);
+                return raw ? JSON.parse(raw) : fallback;
+            } catch { return fallback; }
+        }
+
+        function saveData(key, value) {
+            try {
+                localStorage.setItem('ai_video_editor_' + key, JSON.stringify(value));
+            } catch { /* quota exceeded */ }
+        }
+
+        function getVoices() { return loadData('voices', DEFAULT_VOICES); }
+        function getPresets() { return loadData('presets', DEFAULT_PRESETS); }
+        function getAd() { return loadData('ad', DEFAULT_AD); }
+
+        // ==================== 初始化 ====================
+        function init() {
+            loadVoices();
+            loadAd();
+            applySettingsFromStorage();
+            updateSubtitlePreview();
+            bindDragDrop();
+            bindSettingsListeners();
+            updateAIEngineSelect();
+
+            // 监听浏览器语音列表加载
+            if (window.speechSynthesis) {
+                window.speechSynthesis.onvoiceschanged = () => loadVoices();
+            }
+        }
+
+        function bindSettingsListeners() {
+            document.getElementById('subtitleSize').addEventListener('input', function() {
+                APP_STATE.currentSubtitleSize = parseInt(this.value);
+                document.getElementById('subtitleSizeVal').textContent = this.value;
+                updateSubtitlePreview();
+                saveSettingsToStorage();
+            });
+            document.getElementById('voiceRate').addEventListener('input', function() {
+                APP_STATE.currentVoiceRate = parseFloat(this.value);
+                document.getElementById('voiceRateVal').textContent = this.value;
+            });
+            document.getElementById('voicePitch').addEventListener('input', function() {
+                APP_STATE.currentVoicePitch = parseFloat(this.value);
+                document.getElementById('voicePitchVal').textContent = this.value.toFixed(2);
+            });
+            document.getElementById('voiceVolume').addEventListener('input', function() {
+                APP_STATE.currentVoiceVolume = parseFloat(this.value);
+                document.getElementById('voiceVolumeVal').textContent = Math.round(this.value * 100);
+            });
+            document.getElementById('subtitleFont').addEventListener('change', function() {
+                APP_STATE.currentSubtitleFont = this.value;
+                updateSubtitlePreview();
+                saveSettingsToStorage();
+            });
+            document.getElementById('subtitleStroke').addEventListener('change', function() {
+                APP_STATE.currentSubtitleStroke = this.value;
+                updateSubtitlePreview();
+                saveSettingsToStorage();
+            });
+            document.getElementById('subtitleBg').addEventListener('change', function() {
+                APP_STATE.currentSubtitleBg = this.value;
+                updateSubtitlePreview();
+                saveSettingsToStorage();
+            });
+            document.getElementById('voiceSelect').addEventListener('change', function() {
+                APP_STATE.currentVoice = this.value;
+            });
+            document.getElementById('userCopywriting').addEventListener('input', function() {
+                document.getElementById('charCount').textContent = this.value.length;
+                updateModeAButton();
+            });
+        }
+
+        function saveSettingsToStorage() {
+            const s = {
+                subtitleSize: APP_STATE.currentSubtitleSize,
+                subtitleColor: APP_STATE.currentSubtitleColor,
+                subtitleFont: APP_STATE.currentSubtitleFont,
+                subtitleStroke: APP_STATE.currentSubtitleStroke,
+                subtitleBg: APP_STATE.currentSubtitleBg,
+                voice: APP_STATE.currentVoice,
+                voiceRate: APP_STATE.currentVoiceRate,
+                voicePitch: APP_STATE.currentVoicePitch,
+                voiceVolume: APP_STATE.currentVoiceVolume,
+            };
+            saveData('userSettings', s);
+        }
+
+        function applySettingsFromStorage() {
+            const s = loadData('userSettings', null);
+            if (!s) return;
+            if (s.subtitleSize) { APP_STATE.currentSubtitleSize = s.subtitleSize; document.getElementById('subtitleSize').value = s.subtitleSize; document.getElementById('subtitleSizeVal').textContent = s.subtitleSize; }
+            if (s.subtitleColor) { APP_STATE.currentSubtitleColor = s.subtitleColor; document.getElementById('subtitleColorCustom').value = s.subtitleColor; highlightColorDot(s.subtitleColor); }
+            if (s.subtitleFont) { APP_STATE.currentSubtitleFont = s.subtitleFont; document.getElementById('subtitleFont').value = s.subtitleFont; }
+            if (s.subtitleStroke) { APP_STATE.currentSubtitleStroke = s.subtitleStroke; document.getElementById('subtitleStroke').value = s.subtitleStroke; }
+            if (s.subtitleBg) { APP_STATE.currentSubtitleBg = s.subtitleBg; document.getElementById('subtitleBg').value = s.subtitleBg; }
+            if (s.voiceRate) { APP_STATE.currentVoiceRate = s.voiceRate; document.getElementById('voiceRate').value = s.voiceRate; document.getElementById('voiceRateVal').textContent = s.voiceRate; }
+            if (s.voicePitch) { APP_STATE.currentVoicePitch = s.voicePitch; document.getElementById('voicePitch').value = s.voicePitch; document.getElementById('voicePitchVal').textContent = s.voicePitch.toFixed(2); }
+            if (s.voiceVolume) { APP_STATE.currentVoiceVolume = s.voiceVolume; document.getElementById('voiceVolume').value = s.voiceVolume; document.getElementById('voiceVolumeVal').textContent = Math.round(s.voiceVolume * 100); }
+        }
+
+        function highlightColorDot(color) {
+            document.querySelectorAll('#subtitleColorPresets .color-dot').forEach(d => d.classList.remove('selected'));
+            const match = document.querySelector(`#subtitleColorPresets .color-dot[data-color="${color}"]`);
+            if (match) match.classList.add('selected');
+        }
+
+        // ==================== 配音加载 ====================
+        function loadVoices() {
+            const voices = getVoices();
+            const select = document.getElementById('voiceSelect');
+            select.innerHTML = '';
+
+            // 尝试获取浏览器原生语音
+            let browserVoices = [];
+            if (window.speechSynthesis) {
+                browserVoices = window.speechSynthesis.getVoices();
+            }
+
+            voices.forEach((v, i) => {
+                const opt = document.createElement('option');
+                opt.value = v.name;
+                opt.textContent = v.name + (v.builtin ? ' [内置]' : ' [自定义]');
+                select.appendChild(opt);
+                if (i === 0) APP_STATE.currentVoice = v.name;
+            });
+
+            // 也添加浏览器原生语音
+            browserVoices.forEach(bv => {
+                if (!voices.find(v => v.name === bv.name)) {
+                    const opt = document.createElement('option');
+                    opt.value = bv.name;
+                    opt.textContent = bv.name + ' [系统]';
+                    select.appendChild(opt);
+                }
+            });
+
+            if (!APP_STATE.currentVoice || ![...select.options].find(o => o.value === APP_STATE.currentVoice)) {
+                APP_STATE.currentVoice = select.options[0]?.value || '';
+            }
+            select.value = APP_STATE.currentVoice;
+
+            const savedSettings = loadData('userSettings', null);
+            if (savedSettings?.voice) {
+                APP_STATE.currentVoice = savedSettings.voice;
+                if ([...select.options].find(o => o.value === savedSettings.voice)) {
+                    select.value = savedSettings.voice;
+                }
+            }
+        }
+
+        // ==================== 文件上传 ====================
+        function bindDragDrop() {
+            const zone = document.getElementById('uploadZone');
+            zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+            zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+            zone.addEventListener('drop', e => {
+                e.preventDefault();
+                zone.classList.remove('drag-over');
+                const file = e.dataTransfer.files[0];
+                if (file) processFile(file);
+            });
+        }
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) processFile(file);
+        }
+
+        function processFile(file) {
+            if (!file.type.startsWith('video/')) {
+                showToast('请上传视频文件！', 'error');
+                return;
+            }
+            APP_STATE.uploadedFile = file;
+            document.getElementById('fileName').textContent = file.name;
+            document.getElementById('fileSize').textContent = formatSize(file.size);
+            document.getElementById('fileInfo').style.display = 'flex';
+            updateModeAButton();
+            updateModeBButton();
+            showToast('文件上传成功：' + file.name, 'success');
+        }
+
+        function removeFile() {
+            APP_STATE.uploadedFile = null;
+            document.getElementById('fileInfo').style.display = 'none';
+            document.getElementById('fileInput').value = '';
+            updateModeAButton();
+            updateModeBButton();
+            showToast('已移除文件');
+        }
+
+        function formatSize(bytes) {
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+            return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+        }
+
+        function updateModeAButton() {
+            const btn = document.getElementById('btnModeA');
+            const text = document.getElementById('userCopywriting').value.trim();
+            btn.disabled = !(APP_STATE.uploadedFile && text.length > 10);
+        }
+
+        function updateModeBButton() {
+            const btn = document.getElementById('btnGenerateCopy');
+            btn.disabled = !APP_STATE.uploadedFile;
+        }
+
+        // ==================== 模式切换 ====================
+        function switchMode(mode) {
+            APP_STATE.currentMode = mode;
+            document.getElementById('tabModeA').classList.toggle('active', mode === 'A');
+            document.getElementById('tabModeB').classList.toggle('active', mode === 'B');
+            document.getElementById('modeAContent').style.display = mode === 'A' ? 'block' : 'none';
+            document.getElementById('modeBContent').style.display = mode === 'B' ? 'block' : 'none';
+
+            // 如果切换到B模式，检查文件
+            if (mode === 'B') updateModeBButton();
+        }
+
+        // ==================== 风格面板折叠 ====================
+        function toggleStylePanel() {
+            const panel = document.getElementById('stylePanel');
+            const arrow = document.getElementById('styleArrow');
+            if (panel.style.display === 'none') {
+                panel.style.display = 'block';
+                arrow.textContent = '▼';
+            } else {
+                panel.style.display = 'none';
+                arrow.textContent = '▶';
+            }
+        }
+
+        // ==================== 模式A：直接剪辑 ====================
+        function startEditModeA() {
+            if (!APP_STATE.uploadedFile) { showToast('请先上传电影文件', 'error'); return; }
+            const copywriting = document.getElementById('userCopywriting').value.trim();
+            if (copywriting.length < 10) { showToast('文案太短，请至少输入10个字', 'error'); return; }
+            startEditing(copywriting);
+        }
+
+        // ==================== 模式B：AI生成文案 ====================
+        // ==================== AI 引擎配置 ====================
+        const AI_PROVIDERS = {
+            deepseek: {
+                name: 'DeepSeek（深度求索）',
+                endpoint: 'https://api.deepseek.com/chat/completions',
+                model: 'deepseek-chat',
+            },
+            doubao: {
+                name: '豆包（字节跳动）',
+                endpoint: 'https://ark.cn-beijing.volces.com/api/v3/chat/completions',
+                model: 'doubao-pro-32k',
+            },
+            qianwen: {
+                name: '通义千问（阿里）',
+                endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+                model: 'qwen-plus',
+            },
+            yuanbao: {
+                name: '元宝（腾讯混元）',
+                endpoint: 'https://api.hunyuan.cloud.tencent.com/v1/chat/completions',
+                model: 'hunyuan-lite',
+            },
+            custom: {
+                name: '自定义接口',
+                endpoint: '',
+                model: '',
+            },
+        };
+
+        function getAIConfig() {
+            return loadData('aiConfig', { provider: 'deepseek', apiKey: '', endpoint: AI_PROVIDERS.deepseek.endpoint, model: AI_PROVIDERS.deepseek.model });
+        }
+
+        function saveAIConfig() {
+            const provider = document.getElementById('aiProviderSelect').value;
+            const apiKey = document.getElementById('aiApiKey').value.trim();
+            const endpoint = document.getElementById('aiEndpoint').value.trim();
+            const model = document.getElementById('aiModel').value.trim();
+            if (!endpoint) { showToast('请输入接口地址', 'error'); return; }
+            if (!model) { showToast('请输入模型名', 'error'); return; }
+            const config = { provider, apiKey, endpoint, model };
+            saveData('aiConfig', config);
+            updateAIEngineSelect();
+            showToast('✅ AI 配置已保存', 'success');
+        }
+
+        function onAIProviderChange() {
+            const provider = document.getElementById('aiProviderSelect').value;
+            const info = AI_PROVIDERS[provider];
+            if (info) {
+                document.getElementById('aiEndpoint').value = info.endpoint || '';
+                document.getElementById('aiModel').value = info.model || '';
+                document.getElementById('aiApiKey').value = '';
+                document.getElementById('aiTestResult').textContent = '';
+            }
+        }
+
+        function loadAIConfigToAdminForm() {
+            const config = getAIConfig();
+            document.getElementById('aiProviderSelect').value = config.provider || 'deepseek';
+            document.getElementById('aiApiKey').value = config.apiKey || '';
+            document.getElementById('aiEndpoint').value = config.endpoint || AI_PROVIDERS[config.provider]?.endpoint || '';
+            document.getElementById('aiModel').value = config.model || AI_PROVIDERS[config.provider]?.model || '';
+        }
+
+        async function testAIConnection() {
+            const apiKey = document.getElementById('aiApiKey').value.trim();
+            const endpoint = document.getElementById('aiEndpoint').value.trim();
+            const model = document.getElementById('aiModel').value.trim();
+            const resultSpan = document.getElementById('aiTestResult');
+
+            if (!apiKey) { resultSpan.textContent = '❌ 请先输入 API Key'; resultSpan.style.color = 'var(--red)'; return; }
+            if (!endpoint) { resultSpan.textContent = '❌ 请填写接口地址'; resultSpan.style.color = 'var(--red)'; return; }
+
+            resultSpan.textContent = '⏳ 测试中...';
+            resultSpan.style.color = 'var(--text2)';
+
+            try {
+                const resp = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + apiKey,
+                    },
+                    body: JSON.stringify({
+                        model: model,
+                        messages: [{ role: 'user', content: '你好，请回复"连接成功"两个字。' }],
+                        max_tokens: 20,
+                        temperature: 0,
+                    }),
+                });
+
+                if (resp.ok) {
+                    const data = await resp.json();
+                    const reply = data.choices?.[0]?.message?.content || '';
+                    resultSpan.textContent = '✅ 连接成功！回复：' + reply.substring(0, 30);
+                    resultSpan.style.color = 'var(--green)';
+                } else {
+                    const errText = await resp.text().catch(() => '未知错误');
+                    resultSpan.textContent = '❌ HTTP ' + resp.status + '：' + errText.substring(0, 60);
+                    resultSpan.style.color = 'var(--red)';
+                }
+            } catch (e) {
+                resultSpan.textContent = '❌ 网络错误：' + e.message.substring(0, 50);
+                resultSpan.style.color = 'var(--red)';
+            }
+        }
+
+        // 更新 Mode B 中的引擎选择下拉框
+        function updateAIEngineSelect() {
+            const select = document.getElementById('aiEngineSelect');
+            const config = getAIConfig();
+            select.innerHTML = '';
+
+            // 内置模拟引擎始终可选
+            const builtinOpt = document.createElement('option');
+            builtinOpt.value = 'builtin';
+            builtinOpt.textContent = '📦 内置模拟引擎';
+            select.appendChild(builtinOpt);
+
+            // 如果配置了 API Key，添加对应的真实引擎选项
+            if (config.apiKey) {
+                const providerInfo = AI_PROVIDERS[config.provider] || {};
+                const opt = document.createElement('option');
+                opt.value = 'real';
+                opt.textContent = '🚀 ' + (providerInfo.name || '真实AI') + '（' + config.model + '）';
+                opt.selected = true;
+                select.appendChild(opt);
+            }
+
+            // 如果既没有 API Key，默认选内置
+            if (!config.apiKey) {
+                builtinOpt.selected = true;
+            }
+        }
+
+        // ==================== 视觉 AI 配置 ====================
+        const VISION_PROVIDERS = {
+            qianwen:  { name: '通义千问 VL', endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', model: 'qwen-vl-plus' },
+            deepseek: { name: 'DeepSeek VL',  endpoint: 'https://api.deepseek.com/chat/completions',                        model: 'deepseek-chat' },
+            doubao:   { name: '豆包 Vision',  endpoint: 'https://ark.cn-beijing.volces.com/api/v3/chat/completions',        model: 'doubao-vision-pro' },
+            openai:   { name: 'GPT-4o',       endpoint: 'https://api.openai.com/v1/chat/completions',                       model: 'gpt-4o' },
+            custom:   { name: '自定义',       endpoint: '', model: '' },
+        };
+
+        function getVisionConfig() {
+            const def = VISION_PROVIDERS.qianwen;
+            return loadData('visionConfig', { provider: 'qianwen', apiKey: '', endpoint: def.endpoint, model: def.model, frameInterval: 8 });
+        }
+
+        function saveVisionConfig() {
+            const provider = document.getElementById('visionProviderSelect').value;
+            const apiKey = document.getElementById('visionApiKey').value.trim();
+            const endpoint = document.getElementById('visionEndpoint').value.trim();
+            const model = document.getElementById('visionModel').value.trim();
+            const frameInterval = parseInt(document.getElementById('frameInterval').value) || 8;
+            if (!endpoint) { showToast('请输入视觉接口地址', 'error'); return; }
+            const config = { provider, apiKey, endpoint, model, frameInterval };
+            saveData('visionConfig', config);
+            showToast('✅ 视觉 AI 配置已保存', 'success');
+        }
+
+        function onVisionProviderChange() {
+            const provider = document.getElementById('visionProviderSelect').value;
+            const info = VISION_PROVIDERS[provider];
+            if (info) {
+                document.getElementById('visionEndpoint').value = info.endpoint || '';
+                document.getElementById('visionModel').value = info.model || '';
+            }
+        }
+
+        function loadVisionConfigToAdminForm() {
+            const config = getVisionConfig();
+            document.getElementById('visionProviderSelect').value = config.provider || 'qianwen';
+            document.getElementById('visionApiKey').value = config.apiKey || '';
+            document.getElementById('visionEndpoint').value = config.endpoint || VISION_PROVIDERS[config.provider]?.endpoint || '';
+            document.getElementById('visionModel').value = config.model || VISION_PROVIDERS[config.provider]?.model || '';
+            document.getElementById('frameInterval').value = config.frameInterval || 8;
+        }
+
+        async function testVisionConnection() {
+            const apiKey = document.getElementById('visionApiKey').value.trim();
+            const endpoint = document.getElementById('visionEndpoint').value.trim();
+            const model = document.getElementById('visionModel').value.trim();
+            const span = document.getElementById('visionTestResult');
+            if (!apiKey) { span.textContent = '❌ 请输入 API Key'; span.style.color = 'var(--red)'; return; }
+            span.textContent = '⏳ 测试中...'; span.style.color = 'var(--text2)';
+            try {
+                const resp = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+                    body: JSON.stringify({
+                        model: model,
+                        messages: [{ role: 'user', content: '请回复"视觉连接成功"六个字，不要其他内容。' }],
+                        max_tokens: 20, temperature: 0,
+                    }),
+                });
+                if (resp.ok) {
+                    span.textContent = '✅ 连接成功';
+                    span.style.color = 'var(--green)';
+                } else {
+                    const e = await resp.text().catch(() => '');
+                    span.textContent = '❌ HTTP ' + resp.status + '：' + e.substring(0, 60);
+                    span.style.color = 'var(--red)';
+                }
+            } catch (e) {
+                span.textContent = '❌ 网络错误：' + e.message.substring(0, 50);
+                span.style.color = 'var(--red)';
+            }
+        }
+
+        // ==================== 视频画面提取 ====================
+        async function extractVideoFrames(videoFile, intervalSec) {
+            return new Promise((resolve, reject) => {
+                const video = document.createElement('video');
+                video.preload = 'metadata';
+                video.muted = true;
+                const url = URL.createObjectURL(videoFile);
+                video.src = url;
+
+                video.onloadedmetadata = async function() {
+                    const duration = video.duration;
+                    const totalFrames = Math.max(2, Math.min(30, Math.floor(duration / intervalSec)));
+                    const frameTimes = [];
+                    for (let i = 0; i < totalFrames; i++) {
+                        frameTimes.push((i + 0.3) * intervalSec); // 避开黑屏帧
+                    }
+
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    // 缩小画布以减小 base64（API 限制）
+                    const maxW = 640;
+                    const scale = Math.min(1, maxW / video.videoWidth);
+                    canvas.width = video.videoWidth * scale;
+                    canvas.height = video.videoHeight * scale;
+
+                    const frames = [];
+
+                    for (let i = 0; i < frameTimes.length; i++) {
+                        const t = Math.min(frameTimes[i], duration - 0.1);
+                        try {
+                            await seekTo(video, t);
+                            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                            const base64 = canvas.toDataURL('image/jpeg', 0.75);
+                            frames.push({ time: t, base64, index: i });
+                        } catch (e) {
+                            // 跳过无法提取的帧
+                            frames.push({ time: t, base64: null, index: i, error: true });
+                        }
+                    }
+
+                    URL.revokeObjectURL(url);
+                    resolve({ frames, duration, intervalSec, totalFrames: frames.length });
+                };
+
+                video.onerror = () => {
+                    URL.revokeObjectURL(url);
+                    reject(new Error('无法读取视频文件'));
+                };
+            });
+        }
+
+        function seekTo(video, time) {
+            return new Promise((resolve, reject) => {
+                video.currentTime = time;
+                video.onseeked = () => resolve();
+                video.onerror = () => reject(new Error('seek failed'));
+                // 超时保护
+                setTimeout(() => resolve(), 5000);
+            });
+        }
+
+        // ==================== AI 画面描述 ====================
+        async function describeFramesWithAI(frames, movieName) {
+            const config = getVisionConfig();
+            if (!config.apiKey || !config.endpoint) return null;
+
+            const results = [];
+            const logDiv = document.getElementById('visionLog');
+            logDiv.style.display = 'block';
+
+            for (let i = 0; i < frames.length; i++) {
+                const f = frames[i];
+                if (f.error || !f.base64) {
+                    results.push({ time: f.time, description: '[画面提取失败]', index: f.index });
+                    continue;
+                }
+
+                const timestamp = formatTime(f.time);
+                logDiv.innerHTML += `<div>👁️ AI 正在分析 ${timestamp} 的画面...</div>`;
+                logDiv.scrollTop = logDiv.scrollHeight;
+
+                try {
+                    // 移除 data:image/jpeg;base64, 前缀
+                    const base64Data = f.base64.split(',')[1] || f.base64;
+
+                    const resp = await fetch(config.endpoint, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + config.apiKey,
+                        },
+                        body: JSON.stringify({
+                            model: config.model,
+                            messages: [{
+                                role: 'user',
+                                content: [
+                                    {
+                                        type: 'text',
+                                        text: '请用一句简短的中文描述这个电影画面的内容。描述应包含：场景类型（室内/室外/白天/夜晚）、主要人物或物体、正在发生的动作、画面情绪/氛围。限40字以内，只输出描述本身。',
+                                    },
+                                    {
+                                        type: 'image_url',
+                                        image_url: { url: 'data:image/jpeg;base64,' + base64Data },
+                                    },
+                                ],
+                            }],
+                            max_tokens: 80,
+                            temperature: 0.3,
+                        }),
+                    });
+
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        const desc = data.choices?.[0]?.message?.content?.trim() || '[AI 未返回描述]';
+                        results.push({ time: f.time, description: desc, index: f.index });
+                        logDiv.innerHTML += `<div style="color:var(--green);">✅ ${timestamp}：${desc}</div>`;
+                    } else {
+                        throw new Error('HTTP ' + resp.status);
+                    }
+                } catch (e) {
+                    results.push({ time: f.time, description: '[AI 分析失败]', index: f.index });
+                    logDiv.innerHTML += `<div style="color:var(--red);">❌ ${timestamp}：分析失败（${e.message}）</div>`;
+                }
+
+                logDiv.scrollTop = logDiv.scrollHeight;
+            }
+
+            return results;
+        }
+
+        // ==================== 关键词降级匹配（无视觉AI时） ====================
+        function keywordBasedMatching(copyParagraphs, totalDuration, frameCount) {
+            const matches = [];
+            const segmentDuration = totalDuration / Math.max(copyParagraphs.length, 1);
+
+            copyParagraphs.forEach((para, i) => {
+                // 提取段落关键词
+                const keywords = extractKeywords(para);
+                // 按时间均匀分布 + 关键词微调
+                const baseTime = i * segmentDuration;
+                const jitter = (Math.random() - 0.5) * segmentDuration * 0.4;
+                const startTime = Math.max(0, baseTime + jitter);
+                const endTime = Math.min(totalDuration, startTime + segmentDuration);
+
+                matches.push({
+                    paragraphIndex: i,
+                    text: para.substring(0, 80) + (para.length > 80 ? '...' : ''),
+                    startTime,
+                    endTime,
+                    keywords,
+                    frameDesc: `场景 #${Math.floor(i * frameCount / copyParagraphs.length) + 1}`,
+                    method: 'keyword',
+                });
+            });
+
+            return matches;
+        }
+
+        function extractKeywords(text) {
+            // 简单的 TF-IDF 风格关键词提取
+            const stopWords = new Set(['的', '了', '是', '在', '和', '就', '都', '而', '及', '与', '着', '或', '一个', '没有', '我们', '你们', '他们', '这个', '那个', '什么', '怎么', '如何', '因为', '所以', '但是', '然而', '不过', '虽然', '可以', '这个', '那个', '一种', '非常', '比较', '之后', '之前', '之后', '里面', '外面', '这里', '那里', '自己', '知道', '觉得', '出来', '起来', '时候', '不会', '已经', '还是', '只是', '一定', '一样', '一直', '一切', '一些', '可能', '应该', '这些', '那些']);
+            const words = text.replace(/[，。！？、；：""''\(\)\[\]\{\}\n]/g, ' ').split(/\s+/).filter(w => w.length >= 2 && !stopWords.has(w));
+            const freq = {};
+            words.forEach(w => { freq[w] = (freq[w] || 0) + 1; });
+            return Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 5).map(e => e[0]);
+        }
+
+        // ==================== 智能匹配：画面描述 ↔ 文案段落 ====================
+        function matchCopyToScenes(copyParagraphs, frameDescriptions, totalDuration) {
+            const matches = [];
+            let frameIdx = 0;
+
+            copyParagraphs.forEach((para, paraIdx) => {
+                const paraKeywords = extractKeywords(para);
+
+                // 寻找最匹配的画面
+                let bestFrame = frameDescriptions[Math.min(frameIdx, frameDescriptions.length - 1)];
+                let bestScore = -1;
+
+                // 在当前窗口附近搜索最佳匹配
+                const searchStart = Math.max(0, frameIdx - 1);
+                const searchEnd = Math.min(frameDescriptions.length, frameIdx + 3);
+
+                for (let f = searchStart; f < searchEnd; f++) {
+                    const fd = frameDescriptions[f];
+                    if (!fd || !fd.description || fd.description === '[画面提取失败]' || fd.description === '[AI 分析失败]') continue;
+                    const score = keywordOverlapScore(paraKeywords, fd.description);
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestFrame = fd;
+                        frameIdx = f;
+                    }
+                }
+
+                // 计算起止时间
+                const startTime = bestFrame ? bestFrame.time : (paraIdx / copyParagraphs.length) * totalDuration;
+                const nextFrame = frameDescriptions[Math.min(frameIdx + 1, frameDescriptions.length - 1)];
+                const endTime = nextFrame ? nextFrame.time : Math.min(totalDuration, startTime + (totalDuration / copyParagraphs.length));
+
+                matches.push({
+                    paragraphIndex: paraIdx,
+                    text: para.substring(0, 80) + (para.length > 80 ? '...' : ''),
+                    startTime,
+                    endTime,
+                    keywords: paraKeywords,
+                    frameDesc: bestFrame?.description || '无画面信息',
+                    frameTime: bestFrame?.time || startTime,
+                    method: bestScore > 0 ? 'ai_vision' : 'fallback',
+                    score: bestScore,
+                });
+
+                // 推进到下一个画面
+                frameIdx = Math.min(frameIdx + 1, frameDescriptions.length - 1);
+            });
+
+            return matches;
+        }
+
+        function keywordOverlapScore(keywords, description) {
+            if (!description) return 0;
+            let score = 0;
+            keywords.forEach(kw => {
+                if (description.includes(kw)) score += 2;
+                // 部分匹配
+                for (let i = 0; i < kw.length - 1; i++) {
+                    if (description.includes(kw.substring(i, i + 2))) { score += 0.5; break; }
+                }
+            });
+            return score;
+        }
+
+        // ==================== 渲染时间线 ====================
+        function renderTimeline(matches, totalDuration) {
+            const container = document.getElementById('timelineItems');
+            container.innerHTML = '';
+
+            matches.forEach((m, i) => {
+                const startPct = (m.startTime / totalDuration) * 100;
+                const widthPct = Math.max(2, ((m.endTime - m.startTime) / totalDuration) * 100);
+
+                const methodLabel = m.method === 'ai_vision'
+                    ? '<span style="color:var(--green);font-size:10px;">👁️ AI视觉匹配</span>'
+                    : '<span style="color:var(--gold);font-size:10px;">🔑 关键词匹配</span>';
+
+                const div = document.createElement('div');
+                div.style.cssText = 'background:var(--surface2);border-radius:8px;padding:10px 12px;border-left:3px solid var(--accent);';
+                div.innerHTML = `
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                        <span style="font-size:12px;font-weight:600;">📝 段落 ${i + 1}</span>
+                        <span style="font-size:11px;color:var(--accent);">⏱ ${formatTime(m.startTime)} ~ ${formatTime(m.endTime)}</span>
+                    </div>
+                    <div style="font-size:12px;color:var(--text);margin-bottom:4px;">${m.text}</div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <span style="font-size:11px;color:var(--text2);">🎬 ${m.frameDesc}</span>
+                        ${methodLabel}
+                    </div>
+                    <div style="background:var(--bg);border-radius:4px;height:4px;margin-top:6px;position:relative;">
+                        <div style="position:absolute;left:0;top:0;height:100%;background:var(--accent);border-radius:4px;opacity:0.5;width:100%;"></div>
+                        <div style="position:absolute;left:${startPct}%;top:0;height:100%;background:var(--accent);border-radius:4px;width:${widthPct}%;"></div>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+
+            document.getElementById('editTimeline').style.display = 'block';
+        }
+
+        function formatTime(seconds) {
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            return m + ':' + String(s).padStart(2, '0');
+        }
+
+        // ==================== 真实 AI API 调用 ====================
+        async function callAIAPI(movieName, targetCount, styleSample) {
+            const config = getAIConfig();
+            if (!config.apiKey || !config.endpoint) {
+                return null; // 未配置，返回 null 则降级为模拟生成
+            }
+
+            // 构建 Prompt
+            let systemPrompt = `你是一位专业的电影解说文案写手。请根据以下要求撰写一篇电影解说文案。
+
+【电影名称】《${movieName}》
+【目标字数】约 ${targetCount} 字（请严格控制在此字数的 ±15% 范围内）
+【格式要求】使用自然段分隔，每个段落之间用空行隔开。不要使用 Markdown 格式，直接输出纯文本。`;
+
+            if (styleSample) {
+                systemPrompt += `
+
+【风格模仿样本】以下是用户提供的参考文案，请仔细分析其写作风格并在生成文案时尽可能模仿：
+---
+${styleSample}
+---
+请分析样本以下特征并严格模仿：
+1. 句式结构：长句还是短句？复杂句还是简单句？
+2. 语气风格：口语化/正式/幽默/文艺/犀利？
+3. 用词习惯：偏好的词汇、语气词、转折方式
+4. 段落节奏：每段长度、段落之间的过渡方式
+5. 情绪表达：克制/奔放、客观/主观、冷静/热情
+6. 是否使用 emoji、感叹号、反问句等修辞手法
+
+请在生成的文案中复现上述所有风格特征，让人读起来感觉是同一个作者写的。`;
+            } else {
+                systemPrompt += `
+
+【风格要求】以自然流畅的中文撰写，语气亲切但不随意，适合作为电影解说视频的旁白配音文案。适当融入对剧情的分析、角色的解读、视听语言的点评。`;
+            }
+
+            const userMessage = `请为电影《${movieName}》撰写一篇约 ${targetCount} 字的解说文案。${styleSample ? '务必模仿我提供的风格样本。' : ''}`;
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 120000); // 2分钟超时
+
+            try {
+                const resp = await fetch(config.endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + config.apiKey,
+                    },
+                    body: JSON.stringify({
+                        model: config.model,
+                        messages: [
+                            { role: 'system', content: systemPrompt },
+                            { role: 'user', content: userMessage },
+                        ],
+                        max_tokens: Math.min(targetCount * 3, 16000),
+                        temperature: 0.85,
+                        top_p: 0.9,
+                    }),
+                    signal: controller.signal,
+                });
+
+                clearTimeout(timeoutId);
+
+                if (!resp.ok) {
+                    const errBody = await resp.text().catch(() => '');
+                    throw new Error('API 返回错误 ' + resp.status + (errBody ? '：' + errBody.substring(0, 100) : ''));
+                }
+
+                const data = await resp.json();
+                const content = data.choices?.[0]?.message?.content?.trim() || '';
+
+                if (!content) {
+                    throw new Error('API 返回了空内容');
+                }
+
+                return content;
+            } catch (e) {
+                clearTimeout(timeoutId);
+                if (e.name === 'AbortError') {
+                    throw new Error('请求超时（超过120秒），请尝试减少目标字数或检查网络');
+                }
+                throw e;
+            }
+        }
+
+        function generateCopywriting() {
+            if (!APP_STATE.uploadedFile) { showToast('请先上传电影文件', 'error'); return; }
+
+            const btn = document.getElementById('btnGenerateCopy');
+            const redoBtn = document.getElementById('btnRegenerateCopy');
+            const targetCount = parseInt(document.getElementById('targetWordCount').value) || 800;
+            const styleSample = document.getElementById('styleSample').value.trim() || '';
+            const engineChoice = document.getElementById('aiEngineSelect').value;
+
+            btn.disabled = true;
+            document.getElementById('generatedCopyBox').classList.remove('show');
+
+            // 如果选择了真实 AI 引擎
+            if (engineChoice === 'real') {
+                btn.textContent = '⏳ 正在调用 AI 引擎...';
+                const movieName = APP_STATE.uploadedFile.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ').replace(/\[\d+\]/g, '').trim() || '这部电影';
+
+                setTimeout(() => {
+                    btn.textContent = '⏳ AI 正在撰写 ' + targetCount + ' 字文案...';
+                }, 600);
+
+                callAIAPI(movieName, targetCount, styleSample)
+                    .then(copy => {
+                        if (!copy) {
+                            // API 未配置，降级为模拟生成
+                            fallbackToBuiltin();
+                            return;
+                        }
+                        APP_STATE.generatedCopy = copy;
+                        document.getElementById('generatedCopyText').textContent = copy;
+                        document.getElementById('generatedCopyBox').classList.add('show');
+                        document.getElementById('generatedCopyBox').scrollIntoView({ behavior: 'smooth' });
+                        btn.textContent = '🤖 生成 AI 文案';
+                        btn.disabled = false;
+                        redoBtn.style.display = 'inline-block';
+                        document.getElementById('btnRegenerateCopy').style.display = 'inline-block';
+                        showToast('✅ AI 文案生成完成（目标' + targetCount + '字，实际' + copy.length + '字）', 'success');
+                    })
+                    .catch(err => {
+                        btn.textContent = '🤖 生成 AI 文案';
+                        btn.disabled = false;
+                        showToast('❌ ' + err.message + '，已自动切换为内置引擎', 'error');
+                        // 自动降级
+                        fallbackToBuiltin();
+                    });
+            } else {
+                // 使用内置模拟引擎
+                fallbackToBuiltin();
+            }
+
+            function fallbackToBuiltin() {
+                btn.textContent = '⏳ AI 正在分析电影...';
+                const delay = Math.min(800 + targetCount * 2, 8000);
+                setTimeout(() => {
+                    btn.textContent = '⏳ 正在生成 ' + targetCount + ' 字文案...';
+                }, delay * 0.4);
+                setTimeout(() => {
+                    const copy = generateFakeCopywriting(APP_STATE.uploadedFile.name, targetCount, styleSample);
+                    APP_STATE.generatedCopy = copy;
+                    document.getElementById('generatedCopyText').textContent = copy;
+                    document.getElementById('generatedCopyBox').classList.add('show');
+                    document.getElementById('generatedCopyBox').scrollIntoView({ behavior: 'smooth' });
+                    btn.textContent = '🤖 生成 AI 文案';
+                    btn.disabled = false;
+                    redoBtn.style.display = 'inline-block';
+                    document.getElementById('btnRegenerateCopy').style.display = 'inline-block';
+                    showToast('✅ AI 文案生成完成（目标' + targetCount + '字，实际' + copy.length + '字）', 'success');
+                }, delay);
+            }
+        }
+
+        function generateFakeCopywriting(filename, targetCount, styleSample) {
+            const movieName = filename.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ').replace(/\[\d+\]/g, '').trim() || '这部电影';
+            const t = targetCount || 800;
+
+            // ======== 风格分析 ========
+            const style = analyzeStyle(styleSample);
+
+            // ======== 文案素材池 ========
+            const openingPool = [
+                `今天来跟大家聊一部我最近看过的电影——《${movieName}》。`,
+                `《${movieName}》是一部让我看完之后久久不能平静的作品。`,
+                `大家好，欢迎收看今天的电影解说，我们要聊的是《${movieName}》。`,
+                `如果说有什么电影值得反复品味，《${movieName}》绝对算一部。`,
+                `最近有一部电影刷爆了我的朋友圈，没错，就是《${movieName}》。`,
+                `🎬 今天给大家安利一部宝藏电影——《${movieName}》！`,
+                `你有没有看过这样一部电影——看完之后让你沉默良久？《${movieName}》就是这样一部作品。`,
+                `在众多同类型电影中，《${movieName}》毫无疑问是脱颖而出的那一个。`,
+            ];
+
+            const plotPool = [
+                `影片的故事围绕着主角展开。导演用了一种非常特别的方式来讲述这个故事——不是平铺直叙，而是通过碎片化的回忆和现实交织，让观众一点一点地拼凑出事情的全貌。`,
+                `故事的开端看似平淡无奇，但每一个细节都在为后面的剧情做铺垫。当你看到后半段回过头来想的时候，会发现前面的每一个镜头都不是多余的。`,
+                `这部电影的剧情设计堪称精妙。编剧在故事中埋下了大量的伏笔，每一个转折都既在意料之外，又在情理之中。`,
+                `影片讲述了一个关于选择的故事。主角在面对人生的十字路口时，所做出的每一个决定都深刻地影响了他和身边人的命运。`,
+                `从叙事结构来看，这部电影采用了多线并进的方式，几条故事线在最后巧妙地交汇在一起，形成了一种强烈的情感冲击。`,
+                `剧本的扎实程度让人惊叹。每一个角色的行为动机都经得起推敲，没有一处是强行推进剧情的。`,
+                `故事的主题触及了人性最深处的矛盾——爱与恨、忠诚与背叛、勇气与恐惧。这些看似对立的情感在影片中相互交织，构成了丰富的叙事层次。`,
+                `影片中的世界观构建得非常完整。导演通过大量的细节描绘，让观众完全沉浸在这个虚构的世界中。`,
+                `值得一提的是影片的节奏把控。导演深谙"张弛有度"的道理，在紧张的情节之间穿插了恰到好处的舒缓段落，让观众的情绪得到了很好的调节。`,
+                `整个故事就像是一场精心设计的迷宫，每当你以为找到了出口，又会出现新的转折。这种叙事方式让观众始终保持着高度的注意力。`,
+            ];
+
+            const characterPool = [
+                `主角的人物塑造十分丰满。导演并没有将他塑造成一个完美的英雄形象，而是赋予了他真实的缺点和内心的挣扎，这让角色变得非常可信。`,
+                `演员在片中的表演可以说是一大亮点。主演通过极其细腻的面部表情和肢体语言，将角色复杂的内心世界展现得淋漓尽致。`,
+                `配角的塑造同样值得称道。每一个配角都不是简单的"工具人"，而是有着自己鲜明的个性和完整的故事线。`,
+                `影片中的反派角色塑造得尤为成功。他不是那种脸谱化的"坏人"，而是一个有着自己信念和动机的复杂人物，在某些时刻甚至会让观众产生共鸣。`,
+                `主角从开篇到结尾的成长弧线设计得非常完整。我们能够清晰地看到他在经历了种种磨难之后，如何一步步地蜕变成为更好的自己。`,
+                `演员与角色之间的契合度非常高。可以说，这个角色就是为这位演员量身定做的，每一个表情、每一个动作都恰到好处。`,
+                `导演在塑造人物方面有着独到的功力。他善于通过细节来展现人物的性格——一个眼神、一个手势、甚至一个沉默的瞬间，都能传递出丰富的信息。`,
+                `群像戏的处理也非常出色。在众多角色同时出现的场景中，每个角色都有自己明确的定位和表现空间，不会让人觉得混乱或者喧宾夺主。`,
+            ];
+
+            const visualPool = [
+                `影片的视觉风格非常独特。摄影师在色彩和构图上下了很大的功夫，每一个画面都像是一幅精心拍摄的摄影作品。`,
+                `光影的运用是这部电影的一大特色。导演巧妙地利用明暗对比来烘托情绪，在一些关键场景中，光线的变化甚至成为了叙事的一部分。`,
+                `影片的美术设计堪称一流水准。无论是场景的搭建还是道具的选择，都展现出了极高的审美品位和对细节的追求。`,
+                `摄影指导在这部电影中展现出了大师级的水准。长镜头的调度、手持摄影的运用、以及特殊视角的选取，都服务于故事的表达，而非单纯的炫技。`,
+                `色调的处理非常讲究。影片的前半段以冷色调为主，营造出一种压抑和不安的氛围；而随着剧情的发展，色调逐渐变暖，象征着希望的重燃。`,
+                `特效的运用非常克制且恰到好处。在需要视觉冲击的场景中，特效的表现力十足；而在日常场景中，又完全看不出特效的痕迹。`,
+                `场景的选择也很有讲究。导演通过不同场景的切换，巧妙地暗示了角色的心理状态和故事的发展方向。`,
+                `服装和化妆的设计同样值得关注。角色的造型变化与其内心的成长轨迹是同步的，这种细节上的用心让人赞叹。`,
+            ];
+
+            const musicPool = [
+                `配乐绝对是这部电影的点睛之笔。每一段音乐都与剧情完美契合，情绪的渲染力极强。`,
+                `影片的配乐由著名作曲家操刀，整张原声带的质量非常高。主题旋律在片中多次出现，每次都能给观众带来不同的感受。`,
+                `音效设计同样值得称赞。在一些关键场景中，声音的处理起到了至关重要的作用——突然的静默比任何噪音都更有冲击力。`,
+                `音乐与画面的配合堪称完美。在高潮段落中，音乐节奏的推进与剪辑节奏完全同步，营造出了极强的视听冲击力。`,
+                `主题曲的选择也非常用心。歌词与影片的主题高度契合，在片尾响起的时候，给整个观影体验画上了一个完美的句号。`,
+                `这部电影让我重新认识到了配乐的重要性。恰当的音乐不仅能够烘托氛围，更能够引导观众的情感走向。`,
+            ];
+
+            const climaxPool = [
+                `影片的高潮部分处理得极为出色。经过前面一个多小时的铺垫，所有的情感和矛盾在这一刻集中爆发，冲击力十足。`,
+                `高潮段落中的这场戏可以说是全片最精彩的部分。导演在这里展现出了极强的场面调度能力，多个线索同时推进却井然有序。`,
+                `最打动我的一个场景出现在影片的后期。主角在经历了种种磨难之后，终于面对了自己内心最深处的恐惧，那一刻的表演令人动容。`,
+                `结尾的处理方式非常高级。导演没有选择那种"大团圆"式的结局，而是给观众留下了充足的想象空间。`,
+                `影片中有一个令人印象深刻的转折点。当真相揭晓的那一刻，之前所有的疑惑都得到了解答，这种豁然开朗的感觉非常过瘾。`,
+                `高潮段的动作设计非常精彩。每一场打斗都有其独特的风格和节奏，不仅仅是视觉上的享受，更推动了剧情的发展。`,
+            ];
+
+            const reviewPool = [
+                `总的来说，《${movieName}》是一部值得反复观看的电影。它在叙事、表演、视听等各个方面都展现出了极高的水准。`,
+                `综合来看，我给这部电影打 8.5 分。它虽然不是完美的，但它所展现出的诚意和野心值得我们给予肯定。`,
+                `如果你喜欢那种能让你在看完之后久久回味的电影，那么《${movieName}》绝对不会让你失望。`,
+                `这部电影或许不会成为票房冠军，但它一定会在真正懂得欣赏它的观众心中留下深刻的印记。`,
+                `《${movieName}》让我对国产电影/独立电影有了新的认识。它证明了一点——用心做出来的作品，观众是能够感受到的。`,
+                `强烈推荐给所有热爱电影的观众。无论你是喜欢爆米花大片还是文艺小众片，这部电影都有值得你去欣赏的地方。`,
+                `如果你最近片荒了，不妨给《${movieName}》一个机会。相信我，你不会后悔花这两个小时的。`,
+                `这部电影让我想起了很多经典的同类作品，但它又有自己独特的风格和表达。这是一种很难得的品质。`,
+                `好的电影会让你在看完之后有所思考、有所感悟。《${movieName}》就是这样一部电影。`,
+                `每次重温《${movieName}》，我都能发现一些之前没有注意到的细节。这正是好电影的魅力所在。`,
+            ];
+
+            const extraPool = [
+                `影片中还有一个重要的主题是关于家庭的。导演通过主角与家人之间复杂的关系，探讨了亲情、责任与个人追求之间的平衡。`,
+                `从社会意义的角度来看，这部电影涉及了很多当下值得讨论的议题。它不仅仅是一部娱乐作品，更是一面映照现实的镜子。`,
+                `电影中的一些象征和隐喻也值得细细品味。比如反复出现的那条河流，其实暗示了时间的流逝和命运的无常。`,
+                `导演在影片中致敬了不少经典作品。如果你是一个资深影迷，应该能在其中发现很多有趣的彩蛋。`,
+                `影片的剪辑节奏非常出色。剪辑师在时间线的切换上展现了高超的技巧，让观众能够轻松地跟上复杂的叙事结构。`,
+                `从编剧的角度来看，这部电影的对白写得非常精彩。每一句台词都经过了精心的打磨，既有文学性又不失生活的质感。`,
+                `这部电影的国际化程度也很高。影片在多个国际电影节上都获得了提名和奖项，证明了它在跨文化传播方面的成功。`,
+                `影片中的情感表达非常克制，没有刻意的煽情，但却能让观众在不知不觉中被感动。这种"润物细无声"的方式比直白的煽情要高明得多。`,
+                `值得一提的是影片中的动作场面。导演没有依赖快速剪辑来制造紧张感，而是通过精心设计的镜头运动来展现动作的流畅性。`,
+                `对比同类型的其他作品，《${movieName}》在深度和广度上都更胜一筹。它不仅仅满足于讲述一个好故事，更试图探讨一些更深层次的问题。`,
+                `影片中的幽默元素也处理得非常自然。在沉重的主题中插入适当的轻松段落，让整个观影体验更加丰富和有层次。`,
+                `从观众的反馈来看，这部电影的口碑呈现出了明显的两极分化。喜欢它的人爱得深沉，不喜欢它的人则完全无法理解。这种争议本身也是一种魅力。`,
+            ];
+
+            // ======== 辅助函数 ========
+            function shuffle(arr) {
+                const a = arr.slice();
+                for (let i = a.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [a[i], a[j]] = [a[j], a[i]];
+                }
+                return a;
+            }
+
+            function pickFromModule(pool, min, max) {
+                const shuffled = shuffle(pool);
+                const count = min + Math.floor(Math.random() * (max - min + 1));
+                return shuffled.slice(0, Math.min(count, shuffled.length));
+            }
+
+            // ======== 按模块组装 ========
+            const modules = [
+                { pool: openingPool,   min: 1, max: 2, label: '开场' },
+                { pool: plotPool,      min: 1, max: 5, label: '剧情分析' },
+                { pool: characterPool, min: 1, max: 4, label: '人物塑造' },
+                { pool: visualPool,    min: 0, max: 3, label: '视听语言' },
+                { pool: musicPool,     min: 0, max: 3, label: '配乐音效' },
+                { pool: climaxPool,    min: 1, max: 3, label: '高潮解析' },
+                { pool: reviewPool,    min: 1, max: 3, label: '总结评价' },
+                { pool: extraPool,     min: 0, max: 4, label: '延伸解读' },
+            ];
+
+            let paragraphs = [];
+            modules.forEach(mod => {
+                const picked = pickFromModule(mod.pool, mod.min, mod.max);
+                paragraphs.push(...picked);
+            });
+
+            let currentLength = paragraphs.join('\n\n').length;
+
+            const allPools = [...plotPool, ...characterPool, ...visualPool, ...musicPool, ...climaxPool, ...reviewPool, ...extraPool];
+            const shuffledAll = shuffle(allPools);
+            let poolIdx = 0;
+
+            while (currentLength < t && poolIdx < 200) {
+                const candidate = shuffledAll[poolIdx % shuffledAll.length];
+                if (!paragraphs.includes(candidate)) {
+                    paragraphs.push(candidate);
+                    currentLength = paragraphs.join('\n\n').length;
+                }
+                poolIdx++;
+            }
+
+            while (currentLength > t * 1.3 && paragraphs.length > 3) {
+                paragraphs.pop();
+                currentLength = paragraphs.join('\n\n').length;
+            }
+
+            // ======== 应用风格转换 ========
+            paragraphs = applyStyleToParagraphs(paragraphs, style, movieName);
+
+            return paragraphs.join('\n\n');
+        }
+
+        // ==================== 风格分析器 ====================
+        function analyzeStyle(sample) {
+            if (!sample || sample.length < 20) return null; // 样本太短则不分析
+
+            // 移除首尾空白
+            const text = sample.trim();
+
+            // 1. 分析句子长度
+            const sentences = text.split(/[。！？\.!\?\n；;]+/).filter(s => s.trim().length > 0);
+            const avgSentenceLen = sentences.length > 0
+                ? Math.round(sentences.reduce((sum, s) => sum + s.length, 0) / sentences.length)
+                : 30;
+
+            // 2. 是否使用 emoji
+            const emojiRegex = /[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{2B50}\u{2B55}\u{2705}\u{274C}\u{2728}\u{270F}\u{2753}\u{2757}\u{203C}\u{2049}\u{3030}\u{303D}\u{3297}\u{3299}\u{23CF}\u{23E9}-\u{23F3}\u{23F8}-\u{23FA}\u{25AA}\u{25AB}\u{25B6}\u{25C0}\u{25FB}-\u{25FE}\u{2615}\u{2648}-\u{2653}\u{267B}\u{267F}\u{2693}\u{26A0}\u{26A1}\u{26BD}\u{26BE}\u{26C4}\u{26C5}\u{26D4}\u{26EA}\u{26F2}\u{26F3}\u{26F5}\u{26FA}\u{26FD}\u{2934}\u{2935}\u{2B05}-\u{2B07}\u{2B1B}\u{2B1C}\u{2B50}\u{2B55}\u{303D}\u{3297}\u{1F004}\u{1F0CF}\u{1F170}-\u{1F251}]/gu;
+            const usesEmoji = (text.match(emojiRegex) || []).length > 0;
+
+            // 3. 口语化程度（检测口语化词汇）
+            const colloquialWords = ['说实话', '讲真', '真的', '简直', '太', '超', '贼', '巨', '爆', '绝了', '牛逼', '厉害', '卧槽', '哈哈哈', '哈哈', '！', '!!!', '啊', '吧', '呢', '嘛', '哦', '呗', '简直了', '我跟你讲', '你知道吗', '说实话', '老实说', '不得不说', '我天', '天哪', '妈呀'];
+            const formalWords = ['综上所述', '总而言之', '由此可见', '毋庸置疑', '显而易见', '毋庸置疑', '不可否认', '值得注意', '意味深长', '发人深省', '恰到好处', '淋漓尽致', '无可挑剔', '相得益彰'];
+            let colloquialScore = 0;
+            let formalScore = 0;
+            colloquialWords.forEach(w => { if (text.includes(w)) colloquialScore++; });
+            formalWords.forEach(w => { if (text.includes(w)) formalScore++; });
+            const formality = formalScore > colloquialScore ? 'formal' : (colloquialScore > formalScore ? 'casual' : 'neutral');
+
+            // 4. 段落风格：短段落 vs 长段落
+            const paragraphs = text.split(/\n\n+|\n(?=[^\n]{10,})/).filter(p => p.trim().length > 0);
+            const avgParaLen = paragraphs.length > 0
+                ? Math.round(paragraphs.reduce((sum, p) => sum + p.length, 0) / paragraphs.length)
+                : 120;
+            const likesShortParagraphs = avgParaLen < 80;
+
+            // 5. 是否喜欢使用反问句
+            const rhetoricalCount = (text.match(/[难道|怎能|不是吗|你说呢|是不是|对不对|有没有|你可曾|你是否]/g) || []).length;
+            const usesRhetorical = rhetoricalCount >= 1;
+
+            // 6. 是否使用第一人称
+            const firstPersonCount = (text.match(/[我我们]/g) || []).length;
+            const usesFirstPerson = firstPersonCount >= 3;
+
+            // 7. 提取样本中出现的特色词汇
+            const specialPhrases = extractSpecialPhrases(text);
+
+            return {
+                avgSentenceLen,
+                usesEmoji,
+                formality,
+                likesShortParagraphs,
+                usesRhetorical,
+                usesFirstPerson,
+                specialPhrases,
+                avgParaLen,
+                hasSample: true,
+            };
+        }
+
+        function extractSpecialPhrases(text) {
+            // 提取3-6字的特色短语（出现2次以上的可能为口头禅）
+            const phrases = [];
+            const cleaned = text.replace(/[，。！？、；：""''\(\)\[\]\{\}]/g, ' ');
+            const words = cleaned.split(/\s+/).filter(w => w.length >= 2 && w.length <= 6);
+            const freq = {};
+            words.forEach(w => { freq[w] = (freq[w] || 0) + 1; });
+            for (const [w, c] of Object.entries(freq)) {
+                if (c >= 2 && w.length >= 3) phrases.push(w);
+            }
+            return phrases.slice(0, 5);
+        }
+
+        // ==================== 应用风格到段落 ====================
+        function applyStyleToParagraphs(paragraphs, style, movieName) {
+            if (!style || !style.hasSample) return paragraphs; // 无样本则原样返回
+
+            let result = paragraphs.slice();
+
+            // 1. 调整句子长度：拆分或合并
+            if (style.avgSentenceLen < 20) {
+                // 样本偏好短句 → 把长句拆短
+                result = result.map(p => splitLongSentences(p, style.avgSentenceLen + 10));
+            } else if (style.avgSentenceLen > 50) {
+                // 样本偏好长句 → 合并短句
+                result = mergeShortSentences(result, style.avgSentenceLen);
+            }
+
+            // 2. 处理 Emoji
+            if (style.usesEmoji) {
+                const emojis = ['🎬', '✨', '💡', '🔥', '💯', '👏', '🎯', '🌟', '📌', '❤️', '🎥', '🍿'];
+                // 给开头段落加 emoji
+                if (result.length > 0 && !/[\u{1F300}-\u{1F9FF}]/u.test(result[0])) {
+                    const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+                    result[0] = emoji + ' ' + result[0];
+                }
+                // 随机给部分段落加 emoji 前缀
+                for (let i = 1; i < result.length; i++) {
+                    if (Math.random() < 0.25 && !/[\u{1F300}-\u{1F9FF}]/u.test(result[i])) {
+                        const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+                        result[i] = emoji + ' ' + result[i];
+                    }
+                }
+            } else {
+                // 样本不用 emoji → 移除素材中自带的 emoji
+                result = result.map(p => p.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{1F600}-\u{1F64F}]\s*/gu, ''));
+            }
+
+            // 3. 口语化调整
+            if (style.formality === 'casual') {
+                result = result.map(p => makeCasual(p));
+            } else if (style.formality === 'formal') {
+                result = result.map(p => makeFormal(p));
+            }
+
+            // 4. 段落长度调整
+            if (style.likesShortParagraphs) {
+                // 把长段落拆成多个短段落
+                const newResult = [];
+                result.forEach(p => {
+                    if (p.length > style.avgParaLen * 1.5) {
+                        const parts = p.split(/(?<=[。！？])/);
+                        let chunk = '';
+                        parts.forEach(s => {
+                            if (chunk.length + s.length > style.avgParaLen && chunk.length > 0) {
+                                newResult.push(chunk.trim());
+                                chunk = s;
+                            } else {
+                                chunk += s;
+                            }
+                        });
+                        if (chunk.trim()) newResult.push(chunk.trim());
+                    } else {
+                        newResult.push(p);
+                    }
+                });
+                result = newResult;
+            }
+
+            // 5. 添加反问句
+            if (style.usesRhetorical) {
+                const rhetoricals = [
+                    `你有没有想过，这到底意味着什么？`,
+                    `这不正是我们每个人都在寻找的答案吗？`,
+                    `难道这不是导演最想表达的东西吗？`,
+                    `你说，这样的电影怎么能不让人动容？`,
+                    `仔细想想，是不是这个道理？`,
+                ];
+                // 在中间偏后位置插入反问句
+                const insertIdx = Math.floor(result.length * 0.6);
+                const chosen = rhetoricals[Math.floor(Math.random() * rhetoricals.length)];
+                result.splice(insertIdx, 0, chosen);
+            }
+
+            // 6. 第一人称强化/弱化
+            if (style.usesFirstPerson) {
+                result = result.map(p => {
+                    // 把第三人称客观句部分转第一人称
+                    if (!p.includes('我') && Math.random() < 0.3) {
+                        return p.replace(/^/, '我觉得').replace(/观众/g, '我');
+                    }
+                    return p;
+                });
+            }
+
+            // 7. 混入样本中的特色词汇
+            if (style.specialPhrases && style.specialPhrases.length > 0) {
+                result = result.map((p, i) => {
+                    if (i > 0 && Math.random() < 0.3) {
+                        const phrase = style.specialPhrases[Math.floor(Math.random() * style.specialPhrases.length)];
+                        // 避免重复插入
+                        if (!p.includes(phrase)) {
+                            return p.replace(/[。！？]$/, '，' + phrase + '。');
+                        }
+                    }
+                    return p;
+                });
+            }
+
+            return result;
+        }
+
+        // ==================== 句子拆分/合并辅助 ====================
+        function splitLongSentences(text, maxLen) {
+            return text.replace(/[。！？]/g, '。\n').split(/\n/).map(s => {
+                if (s.length <= maxLen) return s;
+                // 在逗号处分拆
+                const parts = s.split(/[，,]/);
+                let result = '', line = '';
+                parts.forEach(p => {
+                    if (line.length + p.length > maxLen && line.length > 0) {
+                        result += line.trim() + '。\n';
+                        line = p;
+                    } else {
+                        line += (line ? '，' : '') + p;
+                    }
+                });
+                if (line.trim()) result += line.trim();
+                return result;
+            }).join('\n').replace(/\n{2,}/g, '\n').replace(/\n/g, '');
+        }
+
+        function mergeShortSentences(paragraphs, targetLen) {
+            const merged = [];
+            let buffer = '';
+            paragraphs.forEach(p => {
+                if (buffer.length + p.length < targetLen) {
+                    buffer += (buffer ? '；' : '') + p;
+                } else {
+                    if (buffer) merged.push(buffer);
+                    buffer = p;
+                }
+            });
+            if (buffer) merged.push(buffer);
+            return merged.length > 0 ? merged : paragraphs;
+        }
+
+        function makeCasual(text) {
+            return text
+                .replace(/总的来说/g, '说真的')
+                .replace(/综上所述/g, '反正')
+                .replace(/值得注意/g, '注意')
+                .replace(/毋庸置疑/g, '真的')
+                .replace(/影片/g, '这片子')
+                .replace(/电影/g, '电影')
+                .replace(/导演/g, '导演');
+        }
+
+        function makeFormal(text) {
+            return text
+                .replace(/真的/g, '确实')
+                .replace(/太/g, '极为')
+                .replace(/超/g, '非常')
+                .replace(/这/g, '这部');
+        }
+
+        function confirmCopyAndEdit() {
+            if (!APP_STATE.generatedCopy) { showToast('请先生成文案', 'error'); return; }
+            startEditing(APP_STATE.generatedCopy);
+        }
+
+        function editGeneratedCopy() {
+            const box = document.getElementById('generatedCopyText');
+            const current = box.textContent;
+            const textarea = document.createElement('textarea');
+            textarea.className = 'copywriting-area';
+            textarea.value = current;
+            textarea.style.minHeight = '200px';
+            box.replaceWith(textarea);
+            textarea.focus();
+
+            const saveBtn = document.createElement('button');
+            saveBtn.className = 'btn btn-green btn-sm';
+            saveBtn.textContent = '💾 保存修改';
+            saveBtn.style.marginTop = '8px';
+            saveBtn.onclick = function() {
+                APP_STATE.generatedCopy = textarea.value;
+                const newBox = document.createElement('div');
+                newBox.className = 'generated-copy';
+                newBox.id = 'generatedCopyText';
+                newBox.textContent = textarea.value;
+                textarea.replaceWith(newBox);
+                saveBtn.remove();
+                showToast('文案已更新', 'success');
+            };
+            textarea.after(saveBtn);
+        }
+
+        // ==================== AI剪辑流程 ====================
+        function startEditing(copywriting) {
+            if (!APP_STATE.uploadedFile) { showToast('请先上传电影文件', 'error'); return; }
+
+            APP_STATE.isEditing = true;
+            APP_STATE.editCompleted = false;
+            APP_STATE.editProgress = 0;
+
+            // 隐藏之前的结果
+            document.getElementById('completeBox').classList.remove('show');
+            document.getElementById('btnRedoEdit').style.display = 'none';
+            document.getElementById('editTimeline').style.display = 'none';
+            document.getElementById('visionLog').style.display = 'none';
+            document.getElementById('visionLog').innerHTML = '';
+
+            // 显示进度卡片
+            const progressCard = document.getElementById('progressCard');
+            progressCard.style.display = 'block';
+            progressCard.scrollIntoView({ behavior: 'smooth' });
+
+            // 重置步骤
+            for (let i = 1; i <= 5; i++) {
+                document.getElementById('step' + i).classList.remove('done', 'active');
+            }
+
+            updateProgress(0, '准备中...', 0);
+
+            // 解析文案段落
+            const paragraphs = copywriting.split(/\n\n+/).filter(p => p.trim().length > 0);
+            if (paragraphs.length === 0) {
+                paragraphs.push(copywriting);
+            }
+
+            const visionConfig = getVisionConfig();
+            const movieName = APP_STATE.uploadedFile.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ').replace(/\[\d+\]/g, '').trim() || '这部电影';
+
+            // ======== 主流程 ========
+            (async function runEditPipeline() {
+                let matches = null;
+                let totalDuration = 120; // 默认假设2小时电影
+
+                // ---- 步骤1：提取视频关键帧 ----
+                updateProgress(5, '正在提取视频关键帧...', 1);
+                let frames = null;
+                try {
+                    frames = await extractVideoFrames(APP_STATE.uploadedFile, visionConfig.frameInterval || 8);
+                    totalDuration = frames.duration;
+                    document.getElementById('step1').classList.add('done');
+                    updateProgress(15, `已提取 ${frames.totalFrames} 个关键帧（视频时长 ${formatTime(totalDuration)}）`, 1);
+                } catch (e) {
+                    document.getElementById('step1').classList.add('done');
+                    updateProgress(15, '画面提取失败，使用关键词匹配模式', 1);
+                }
+
+                // ---- 步骤2：AI 识别画面内容 ----
+                let frameDescriptions = null;
+                if (frames && visionConfig.apiKey) {
+                    updateProgress(20, '正在使用 AI 识别视频画面...', 2);
+                    document.getElementById('step2').classList.add('active');
+                    try {
+                        frameDescriptions = await describeFramesWithAI(frames.frames, movieName);
+                        document.getElementById('step2').classList.add('done');
+                        updateProgress(50, `AI 已识别 ${frameDescriptions.filter(f => f.description && !f.description.includes('失败')).length} 个画面`, 2);
+                    } catch (e) {
+                        document.getElementById('step2').classList.add('done');
+                        updateProgress(50, 'AI 画面识别异常，降级为关键词匹配', 2);
+                    }
+                } else {
+                    document.getElementById('step2').classList.add('done');
+                    updateProgress(50, '未配置视觉 AI，使用关键词匹配模式', 2);
+                }
+
+                // ---- 步骤3：智能匹配文案 ↔ 画面 ----
+                updateProgress(55, '正在进行文案与画面的智能匹配...', 3);
+                document.getElementById('step3').classList.add('active');
+
+                if (frameDescriptions && frameDescriptions.length > 0) {
+                    matches = matchCopyToScenes(paragraphs, frameDescriptions, totalDuration);
+                } else {
+                    const frameCount = frames ? frames.totalFrames : Math.floor(totalDuration / 8);
+                    matches = keywordBasedMatching(paragraphs, totalDuration, frameCount);
+                }
+
+                document.getElementById('step3').classList.add('done');
+                const aiMatchCount = matches.filter(m => m.method === 'ai_vision').length;
+                updateProgress(65, `匹配完成：${matches.length} 个段落 → ${aiMatchCount > 0 ? aiMatchCount + ' 段 AI 视觉匹配' : '关键词匹配'}`, 3);
+
+                // 渲染时间线
+                renderTimeline(matches, totalDuration);
+
+                // ---- 步骤4：合成配音 ----
+                updateProgress(80, '正在合成 AI 配音...', 4);
+                document.getElementById('step4').classList.add('active');
+                setTimeout(() => {
+                    if (!APP_STATE.isEditing) return;
+                    document.getElementById('step4').classList.add('done');
+                    updateProgress(90, '配音合成完成', 4);
+
+                    // ---- 步骤5：渲染输出 ----
+                    updateProgress(95, '正在渲染最终视频...', 5);
+                    document.getElementById('step5').classList.add('active');
+                    setTimeout(() => {
+                        if (!APP_STATE.isEditing) return;
+                        document.getElementById('step5').classList.add('done');
+                        updateProgress(100, '视频生成完成！', 5);
+
+                        APP_STATE.editCompleted = true;
+                        APP_STATE.isEditing = false;
+                        document.getElementById('btnRedoEdit').style.display = 'inline-block';
+                        document.getElementById('completeBox').classList.add('show');
+                        document.getElementById('completeBox').scrollIntoView({ behavior: 'smooth' });
+
+                        const visionUsed = frameDescriptions && frameDescriptions.length > 0;
+                        showToast('🎉 视频生成完成！共 ' + matches.length + ' 段，' + (visionUsed ? 'AI视觉匹配' : '智能匹配'), 'success');
+                    }, 1000);
+                }, 800);
+            })();
+        }
+
+        function updateProgress(pct, text, activeStep) {
+            document.getElementById('progressBar').style.width = pct + '%';
+            document.getElementById('progressText').textContent = text;
+
+            for (let i = 1; i <= 5; i++) {
+                const step = document.getElementById('step' + i);
+                step.classList.remove('done', 'active');
+                if (i < activeStep) step.classList.add('done');
+                if (i === activeStep) step.classList.add('active');
+            }
+        }
+
+        function redoEdit() {
+            APP_STATE.isEditing = false;
+            APP_STATE.editCompleted = false;
+            document.getElementById('progressCard').style.display = 'none';
+            document.getElementById('completeBox').classList.remove('show');
+            document.getElementById('btnRedoEdit').style.display = 'none';
+            document.getElementById('editTimeline').style.display = 'none';
+            document.getElementById('visionLog').style.display = 'none';
+            document.getElementById('visionLog').innerHTML = '';
+            document.getElementById('progressBar').style.width = '0%';
+            for (let i = 1; i <= 5; i++) document.getElementById('step' + i).classList.remove('done', 'active');
+
+            if (APP_STATE.currentMode === 'A') {
+                startEditModeA();
+            } else {
+                confirmCopyAndEdit();
+            }
+            showToast('🔄 正在重新剪辑...');
+        }
+
+        // ==================== 下载与预览 ====================
+        function downloadVideo() {
+            if (!APP_STATE.uploadedFile) { showToast('没有可下载的视频', 'error'); return; }
+            showToast('⏳ 模拟下载中...（实际使用需连接后端处理）', 'success');
+            // 实际应用中这里会触发真实下载
+            setTimeout(() => showToast('💡 提示：当前为演示模式，实际部署后此处将下载处理后的视频'), 1500);
+        }
+
+        function previewVideo() {
+            showToast('👁️ 模拟预览中...（实际使用需连接后端处理）', 'success');
+            // 实际应用中这里会打开视频预览
+        }
+
+        // ==================== 字幕预览 ====================
+        function updateSubtitlePreview() {
+            const preview = document.getElementById('subtitlePreview');
+            const size = document.getElementById('subtitleSize').value || APP_STATE.currentSubtitleSize;
+            const color = APP_STATE.currentSubtitleColor;
+            const font = document.getElementById('subtitleFont').value || APP_STATE.currentSubtitleFont;
+            const stroke = document.getElementById('subtitleStroke').value || APP_STATE.currentSubtitleStroke;
+            const bg = document.getElementById('subtitleBg').value || APP_STATE.currentSubtitleBg;
+
+            preview.style.fontSize = size + 'px';
+            preview.style.color = color;
+            preview.style.fontFamily = font;
+            preview.style.textShadow = stroke === 'none' ? 'none' : stroke;
+            preview.style.background = bg;
+
+            document.getElementById('subtitleSizeVal').textContent = size;
+        }
+
+        function selectSubtitleColor(dot) {
+            document.querySelectorAll('#subtitleColorPresets .color-dot').forEach(d => d.classList.remove('selected'));
+            dot.classList.add('selected');
+            APP_STATE.currentSubtitleColor = dot.dataset.color;
+            document.getElementById('subtitleColorCustom').value = dot.dataset.color;
+            updateSubtitlePreview();
+            saveSettingsToStorage();
+        }
+
+        function selectCustomSubtitleColor() {
+            const color = document.getElementById('subtitleColorCustom').value;
+            APP_STATE.currentSubtitleColor = color;
+            highlightColorDot(color);
+            updateSubtitlePreview();
+            saveSettingsToStorage();
+        }
+
+        // ==================== 配音试听 ====================
+        function previewVoice() {
+            if (!window.speechSynthesis) {
+                showToast('你的浏览器不支持语音合成', 'error');
+                return;
+            }
+            window.speechSynthesis.cancel();
+
+            const uttr = new SpeechSynthesisUtterance('这是一段配音试听示例。电影解说需要清晰、有感情的声音。');
+            const voices = window.speechSynthesis.getVoices();
+            const selectedName = document.getElementById('voiceSelect').value;
+
+            const voice = voices.find(v => v.name === selectedName);
+            if (voice) uttr.voice = voice;
+
+            // 基础参数
+            let rate = parseFloat(document.getElementById('voiceRate').value);
+            let pitch = parseFloat(document.getElementById('voicePitch').value);
+            let volume = parseFloat(document.getElementById('voiceVolume').value);
+
+            // 如果有音频分析结果，应用模仿参数
+            if (APP_STATE.audioAnalysis) {
+                const a = APP_STATE.audioAnalysis;
+                // 将分析值混合到用户设定中（分析权重 60%，用户设定权重 40%）
+                rate = rate * 0.4 + a.speechRate * 0.6;
+                pitch = pitch * 0.4 + a.avgPitch * 0.6;
+                volume = volume * 0.4 + a.avgVolume * 0.6;
+                // 限制范围
+                rate = Math.max(0.5, Math.min(2, rate));
+                pitch = Math.max(0.5, Math.min(2, pitch));
+                volume = Math.max(0.1, Math.min(1, volume));
+            }
+
+            uttr.rate = rate;
+            uttr.pitch = pitch;
+            uttr.volume = volume;
+            uttr.lang = 'zh-CN';
+
+            window.speechSynthesis.speak(uttr);
+
+            if (APP_STATE.audioAnalysis) {
+                showToast('🔊 正在模仿音频特征播放...（语速' + rate.toFixed(1) + ' / 音调' + pitch.toFixed(1) + '）');
+            } else {
+                showToast('🔊 正在播放配音试听...');
+            }
+        }
+
+        // ==================== 音频样本处理 ====================
+        function handleAudioSample(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            if (!file.type.startsWith('audio/')) {
+                showToast('请上传音频文件（MP3/WAV/M4A 等）', 'error');
+                return;
+            }
+            APP_STATE.audioSample = file;
+            APP_STATE.audioAnalysis = null;
+
+            document.getElementById('audioFileInfo').style.display = 'block';
+            document.getElementById('audioFileInfo').textContent = '✅ 已选择：' + file.name + '（' + formatSize(file.size) + '）';
+            document.getElementById('btnAnalyzeAudio').style.display = 'inline-block';
+            document.getElementById('btnAnalyzeAudio').disabled = false;
+            document.getElementById('audioAnalysisResult').style.display = 'none';
+            document.getElementById('audioImitationBar').style.display = 'none';
+
+            // 自动触发分析
+            analyzeAudioSample();
+        }
+
+        function analyzeAudioSample() {
+            const file = APP_STATE.audioSample;
+            if (!file) {
+                showToast('请先选择音频文件', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('btnAnalyzeAudio');
+            btn.disabled = true;
+            btn.textContent = '⏳ 分析中...';
+
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                const arrayBuffer = e.target.result;
+                audioCtx.decodeAudioData(arrayBuffer, function(audioBuffer) {
+                    const analysis = performAudioAnalysis(audioBuffer);
+                    APP_STATE.audioAnalysis = analysis;
+
+                    // 显示分析结果
+                    const resultDiv = document.getElementById('audioAnalysisResult');
+                    resultDiv.style.display = 'block';
+                    resultDiv.innerHTML =
+                        '📊 <b>分析结果：</b><br>' +
+                        '　语速指数：' + analysis.speechRate.toFixed(2) + '（参考：1.0=正常）<br>' +
+                        '　音调指数：' + analysis.avgPitch.toFixed(2) + '（参考：1.0=正常）<br>' +
+                        '　音量指数：' + analysis.avgVolume.toFixed(2) + '（参考：0.9=正常）<br>' +
+                        '　音频时长：' + analysis.duration.toFixed(1) + ' 秒';
+
+                    document.getElementById('audioImitationBar').style.display = 'block';
+                    btn.textContent = '✅ 已分析';
+                    btn.style.background = 'var(--green)';
+
+                    // 将分析结果自动填入音调/语速（给用户参考）
+                    document.getElementById('voiceRate').value = analysis.speechRate.toFixed(1);
+                    document.getElementById('voiceRateVal').textContent = analysis.speechRate.toFixed(1);
+                    APP_STATE.currentVoiceRate = analysis.speechRate;
+                    document.getElementById('voicePitch').value = analysis.avgPitch.toFixed(2);
+                    document.getElementById('voicePitchVal').textContent = analysis.avgPitch.toFixed(2);
+                    APP_STATE.currentVoicePitch = analysis.avgPitch;
+
+                    showToast('✅ 音频分析完成！语速/音调已自动调整', 'success');
+                    audioCtx.close();
+                }, function(err) {
+                    btn.disabled = false;
+                    btn.textContent = '🔍 分析';
+                    showToast('音频解码失败，请尝试其他格式', 'error');
+                    audioCtx.close();
+                });
+            };
+
+            reader.onerror = function() {
+                btn.disabled = false;
+                btn.textContent = '🔍 分析';
+                showToast('文件读取失败', 'error');
+            };
+
+            reader.readAsArrayBuffer(file);
+        }
+
+        function performAudioAnalysis(audioBuffer) {
+            const sampleRate = audioBuffer.sampleRate;
+            const channels = audioBuffer.numberOfChannels;
+            const data = audioBuffer.getChannelData(0); // 取第一声道
+            const duration = audioBuffer.duration;
+            const totalSamples = data.length;
+
+            // 1. 音量分析（RMS）
+            let rmsSum = 0;
+            let peakCount = 0;
+            let peakThreshold = 0;
+            // 计算 RMS 和峰值阈值
+            for (let i = 0; i < totalSamples; i++) {
+                rmsSum += data[i] * data[i];
+            }
+            const rms = Math.sqrt(rmsSum / totalSamples);
+            // 计算高于 2*RMS 的采样点比例（语音活跃度）
+            peakThreshold = rms * 2;
+            for (let i = 0; i < totalSamples; i++) {
+                if (Math.abs(data[i]) > peakThreshold) peakCount++;
+            }
+            const speechActivity = peakCount / totalSamples;
+            // 音量指数：将 RMS 映射到 0.1~1.0
+            const avgVolume = Math.max(0.1, Math.min(1.0, rms * 8));
+
+            // 2. 语速分析（通过检测音量包络变化频率来估算语速）
+            // 将音频分帧，检测能量峰值间隔
+            const frameSize = Math.floor(sampleRate * 0.02); // 20ms 一帧
+            const numFrames = Math.floor(totalSamples / frameSize);
+            const frameEnergies = [];
+            for (let f = 0; f < numFrames; f++) {
+                let energy = 0;
+                const start = f * frameSize;
+                for (let i = start; i < start + frameSize && i < totalSamples; i++) {
+                    energy += data[i] * data[i];
+                }
+                frameEnergies.push(Math.sqrt(energy / frameSize));
+            }
+
+            // 计算能量变化的过零率（音节的间接指标）
+            let energyChanges = 0;
+            const energyThreshold = rms * 0.5;
+            let wasAbove = frameEnergies[0] > energyThreshold;
+            for (let f = 1; f < frameEnergies.length; f++) {
+                const isAbove = frameEnergies[f] > energyThreshold;
+                if (isAbove !== wasAbove) {
+                    energyChanges++;
+                    wasAbove = isAbove;
+                }
+            }
+            // 每秒音节变化数
+            const changesPerSec = energyChanges / duration;
+            // 映射到语速 0.5~2.0（正常对话约 3-6 次变化/秒）
+            const speechRate = Math.max(0.5, Math.min(2.0, changesPerSec / 4));
+
+            // 3. 音调分析（通过过零率近似）
+            let zeroCrossings = 0;
+            for (let i = 1; i < totalSamples; i++) {
+                if ((data[i] >= 0 && data[i - 1] < 0) || (data[i] < 0 && data[i - 1] >= 0)) {
+                    zeroCrossings++;
+                }
+            }
+            const zcrPerSec = zeroCrossings / duration;
+            // 将 ZCR 映射到 0.5~2.0（语音 ZCR 通常在 500-3000）
+            const avgPitch = Math.max(0.5, Math.min(2.0, zcrPerSec / 1500));
+
+            // 返回分析结果
+            return {
+                avgPitch: Math.round(avgPitch * 100) / 100,
+                speechRate: Math.round(speechRate * 100) / 100,
+                avgVolume: Math.round(avgVolume * 100) / 100,
+                duration: Math.round(duration * 10) / 10,
+                rms: Math.round(rms * 1000) / 1000,
+                speechActivity: Math.round(speechActivity * 100) / 100,
+            };
+        }
+
+        function clearAudioSample() {
+            APP_STATE.audioSample = null;
+            APP_STATE.audioAnalysis = null;
+            document.getElementById('audioSampleInput').value = '';
+            document.getElementById('audioFileInfo').style.display = 'none';
+            document.getElementById('btnAnalyzeAudio').style.display = 'none';
+            document.getElementById('audioAnalysisResult').style.display = 'none';
+            document.getElementById('audioImitationBar').style.display = 'none';
+            showToast('音频样本已清除，恢复默认配音参数');
+        }
+
+        // ==================== 广告 ====================
+        function loadAd() {
+            const ad = getAd();
+            const img = document.getElementById('adImage');
+            const placeholder = document.getElementById('adPlaceholder');
+
+            if (ad.imageData) {
+                img.src = ad.imageData;
+                img.style.display = 'block';
+                placeholder.style.display = 'none';
+            } else if (ad.imageUrl) {
+                img.src = ad.imageUrl;
+                img.style.display = 'block';
+                placeholder.style.display = 'none';
+            } else {
+                img.style.display = 'none';
+                placeholder.style.display = 'block';
+            }
+        }
+
+        function clickAd() {
+            const ad = getAd();
+            if (ad.linkUrl) {
+                window.open(ad.linkUrl, '_blank');
+            }
+        }
+
+        function handleAdImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file || !file.type.startsWith('image/')) {
+                showToast('请选择图片文件', 'error');
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById('adImageUrl').value = '[已上传本地图片]';
+                document.getElementById('adImageUrl').dataset.localData = e.target.result;
+                showToast('图片已加载，点击保存生效', 'success');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function saveAdSettings() {
+            const imageUrlField = document.getElementById('adImageUrl');
+            let imageUrl = imageUrlField.value.trim();
+            let imageData = imageUrlField.dataset.localData || '';
+
+            if (imageUrl === '[已上传本地图片]') {
+                imageUrl = '';
+            }
+
+            const linkUrl = document.getElementById('adLinkUrl').value.trim();
+            const ad = { imageUrl, linkUrl, imageData };
+            saveData('ad', ad);
+            loadAd();
+            closeAdmin();
+            showToast('✅ 广告设置已保存', 'success');
+        }
+
+        function clearAd() {
+            saveData('ad', DEFAULT_AD);
+            document.getElementById('adImageUrl').value = '';
+            document.getElementById('adImageUrl').dataset.localData = '';
+            document.getElementById('adLinkUrl').value = '';
+            document.getElementById('adImageFile').value = '';
+            loadAd();
+            showToast('广告已清除', 'success');
+        }
+
+        // ==================== 管理后台 ====================
+        function showAdminPassword() {
+            document.getElementById('pwdOverlay').classList.add('show');
+            document.getElementById('adminPasswordInput').value = '';
+            setTimeout(() => document.getElementById('adminPasswordInput').focus(), 200);
+        }
+
+        function closeAdminPassword() {
+            document.getElementById('pwdOverlay').classList.remove('show');
+        }
+
+        function verifyAdminPassword() {
+            const input = document.getElementById('adminPasswordInput').value;
+            if (input === ADMIN_PASSWORD) {
+                document.getElementById('pwdOverlay').classList.remove('show');
+                openAdmin();
+                showToast('✅ 已进入后台管理', 'success');
+            } else {
+                showToast('❌ 密码错误', 'error');
+            }
+        }
+
+        function openAdmin() {
+            document.getElementById('adminOverlay').classList.add('show');
+            document.getElementById('adminPasswordInput').value = '';
+            renderVoiceList();
+            renderPresetList();
+            loadAdToAdminForm();
+            loadAIConfigToAdminForm();
+            loadVisionConfigToAdminForm();
+        }
+
+        function closeAdmin() {
+            document.getElementById('adminOverlay').classList.remove('show');
+        }
+
+        function loadAdToAdminForm() {
+            const ad = getAd();
+            document.getElementById('adImageUrl').value = ad.imageUrl || '';
+            document.getElementById('adLinkUrl').value = ad.linkUrl || '';
+            document.getElementById('adImageUrl').dataset.localData = ad.imageData || '';
+            document.getElementById('adImageFile').value = '';
+        }
+
+        // 音色管理
+        function renderVoiceList() {
+            const voices = getVoices();
+            const container = document.getElementById('voiceList');
+            container.innerHTML = voices.map((v, i) => `
+                <div class="list-item">
+                    <span>🎤 ${v.name} <span style="color:var(--text2);font-size:11px;">(${v.lang})</span> ${v.builtin ? '<span style="color:var(--blue);font-size:11px;">[内置]</span>' : '<span style="color:var(--gold);font-size:11px;">[自定义]</span>'}</span>
+                    <div class="actions">
+                        ${!v.builtin ? `<button onclick="deleteVoice(${i})" title="删除">🗑️</button>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function addVoice() {
+            const name = document.getElementById('newVoiceName').value.trim();
+            const lang = document.getElementById('newVoiceLang').value.trim();
+            if (!name) { showToast('请输入音色名称', 'error'); return; }
+            const voices = getVoices();
+            if (voices.find(v => v.name === name)) { showToast('该音色已存在', 'error'); return; }
+            voices.push({ name, lang: lang || 'zh-CN', builtin: false });
+            saveData('voices', voices);
+            document.getElementById('newVoiceName').value = '';
+            renderVoiceList();
+            loadVoices();
+            showToast('✅ 音色已添加', 'success');
+        }
+
+        function deleteVoice(index) {
+            const voices = getVoices();
+            if (voices[index].builtin) { showToast('内置音色不可删除', 'error'); return; }
+            voices.splice(index, 1);
+            saveData('voices', voices);
+            renderVoiceList();
+            loadVoices();
+            showToast('音色已删除', 'success');
+        }
+
+        // 预设管理
+        function renderPresetList() {
+            const presets = getPresets();
+            const container = document.getElementById('presetList');
+            container.innerHTML = presets.map((p, i) => `
+                <div class="list-item">
+                    <span>🎨 ${p.name} <span style="color:var(--text2);font-size:11px;">字号:${p.size}px | 颜色:</span><span style="display:inline-block;width:14px;height:14px;background:${p.color};border-radius:3px;vertical-align:middle;"></span></span>
+                    <div class="actions">
+                        <button onclick="applyPreset(${i})" title="应用">✅</button>
+                        <button onclick="deletePreset(${i})" title="删除">🗑️</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function saveCurrentPreset() {
+            const name = document.getElementById('newPresetName').value.trim();
+            if (!name) { showToast('请输入预设名称', 'error'); return; }
+            const presets = getPresets();
+            const preset = {
+                name,
+                size: APP_STATE.currentSubtitleSize,
+                color: APP_STATE.currentSubtitleColor,
+                font: APP_STATE.currentSubtitleFont,
+                stroke: APP_STATE.currentSubtitleStroke,
+                bg: APP_STATE.currentSubtitleBg,
+            };
+            // 替换同名预设
+            const existingIdx = presets.findIndex(p => p.name === name);
+            if (existingIdx >= 0) { presets[existingIdx] = preset; }
+            else { presets.push(preset); }
+            saveData('presets', presets);
+            document.getElementById('newPresetName').value = '';
+            renderPresetList();
+            showToast('✅ 预设已保存', 'success');
+        }
+
+        function applyPreset(index) {
+            const presets = getPresets();
+            const p = presets[index];
+            if (!p) return;
+            APP_STATE.currentSubtitleSize = p.size;
+            APP_STATE.currentSubtitleColor = p.color;
+            APP_STATE.currentSubtitleFont = p.font;
+            APP_STATE.currentSubtitleStroke = p.stroke;
+            APP_STATE.currentSubtitleBg = p.bg;
+
+            document.getElementById('subtitleSize').value = p.size;
+            document.getElementById('subtitleSizeVal').textContent = p.size;
+            document.getElementById('subtitleColorCustom').value = p.color;
+            document.getElementById('subtitleFont').value = p.font;
+            document.getElementById('subtitleStroke').value = p.stroke;
+            document.getElementById('subtitleBg').value = p.bg;
+            highlightColorDot(p.color);
+
+            updateSubtitlePreview();
+            saveSettingsToStorage();
+            closeAdmin();
+            showToast('✅ 预设「' + p.name + '」已应用', 'success');
+        }
+
+        function deletePreset(index) {
+            const presets = getPresets();
+            presets.splice(index, 1);
+            saveData('presets', presets);
+            renderPresetList();
+            showToast('预设已删除', 'success');
+        }
+
+        function resetAllSettings() {
+            if (!confirm('确定要恢复全部默认设置吗？这将清除所有自定义音色、预设和广告设置。')) return;
+            saveData('voices', DEFAULT_VOICES);
+            saveData('presets', DEFAULT_PRESETS);
+            saveData('ad', DEFAULT_AD);
+            saveData('userSettings', null);
+            loadVoices();
+            loadAd();
+            renderVoiceList();
+            renderPresetList();
+            loadAdToAdminForm();
+            showToast('✅ 已恢复默认设置', 'success');
+        }
+
+        // ==================== Toast ====================
+        function showToast(message, type = '') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = 'toast ' + type;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transition = 'opacity 0.3s';
+                setTimeout(() => toast.remove(), 300);
+            }, 2500);
+        }
+
+        // ==================== 键盘快捷键 ====================
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeAdmin();
+                closeAdminPassword();
+            }
+        });
+
+        // 点击遮罩关闭
+        document.getElementById('adminOverlay').addEventListener('click', function(e) {
+            if (e.target === this) closeAdmin();
+        });
+        document.getElementById('pwdOverlay').addEventListener('click', function(e) {
+            if (e.target === this) closeAdminPassword();
+        });
+
+        // ==================== 启动 ====================
+        init();
+    </script>
+</body>
+</html>
