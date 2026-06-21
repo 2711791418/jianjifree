@@ -857,44 +857,36 @@
             <!-- AI 文案引擎配置 -->
             <div class="admin-section">
                 <h3>🤖 AI 文案引擎配置</h3>
-                <p style="font-size:12px;color:var(--text2);margin-bottom:10px;">配置大模型 API 以用于文案生成与风格模仿。未配置则使用内置模拟生成。</p>
+                <p style="font-size:12px;color:var(--green);margin-bottom:10px;">🔐 API Key 已保存在 Cloudflare Worker 环境变量中，前端不暴露。</p>
                 <div class="admin-row">
-                    <label style="font-size:13px;white-space:nowrap;">选择引擎：</label>
+                    <label style="font-size:13px;white-space:nowrap;">文案引擎：</label>
                     <select id="aiProviderSelect" onchange="onAIProviderChange()" style="padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;font-family:inherit;flex:1;min-width:150px;">
                         <option value="deepseek">DeepSeek（深度求索）</option>
                         <option value="doubao">豆包（字节跳动）</option>
                         <option value="qianwen">通义千问（阿里）</option>
                         <option value="yuanbao">元宝（腾讯混元）</option>
-                        <option value="custom">自定义 OpenAI 兼容接口</option>
+                        <option value="custom">自定义接口</option>
                     </select>
-                </div>
-                <div class="admin-row">
-                    <label style="font-size:13px;white-space:nowrap;">API Key：</label>
-                    <input type="password" id="aiApiKey" placeholder="输入 API Key（加密存储于本地浏览器）">
-                </div>
-                <div class="admin-row">
-                    <label style="font-size:13px;white-space:nowrap;">接口地址：</label>
-                    <input type="text" id="aiEndpoint" placeholder="https://api.deepseek.com/chat/completions">
                 </div>
                 <div class="admin-row">
                     <label style="font-size:13px;white-space:nowrap;">模型名：</label>
                     <input type="text" id="aiModel" placeholder="deepseek-chat">
                 </div>
                 <div style="margin-top:10px;display:flex;gap:10px;align-items:center;">
-                    <button class="btn btn-primary btn-sm" onclick="saveAIConfig()">💾 保存 AI 配置</button>
+                    <button class="btn btn-primary btn-sm" onclick="saveAIConfig()">💾 保存配置</button>
                     <button class="btn btn-outline btn-sm" onclick="testAIConnection()">🔌 测试连接</button>
                     <span id="aiTestResult" style="font-size:12px;"></span>
                 </div>
                 <p style="font-size:11px;color:var(--text2);margin-top:8px;">
-                    💡 API Key 仅保存在你的浏览器本地，不会上传到任何服务器。
-                    各引擎默认端点已预填，切换引擎自动更新。选择"自定义"可接入任意 OpenAI 兼容接口。
+                    💡 API Key 在 Worker 环境变量中配置（wrangler.toml 的 [vars] 段）。
+                    你只需在此选择引擎和模型，Worker 会自动使用对应的 Key。
                 </p>
             </div>
 
-            <!-- AI 视觉引擎配置（视频画面分析） -->
+            <!-- AI 视觉引擎配置 -->
             <div class="admin-section">
-                <h3>👁️ AI 视觉引擎配置（视频画面分析）</h3>
-                <p style="font-size:12px;color:var(--text2);margin-bottom:10px;">配置多模态视觉模型以分析视频画面内容。未配置则使用关键词匹配。</p>
+                <h3>👁️ AI 视觉引擎配置</h3>
+                <p style="font-size:12px;color:var(--green);margin-bottom:10px;">🔐 视觉 API Key 同样在 Worker 中，前端安全。</p>
                 <div class="admin-row">
                     <label style="font-size:13px;white-space:nowrap;">视觉引擎：</label>
                     <select id="visionProviderSelect" onchange="onVisionProviderChange()" style="padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;font-family:inherit;flex:1;min-width:150px;">
@@ -902,16 +894,8 @@
                         <option value="deepseek">DeepSeek VL（深度求索）</option>
                         <option value="doubao">豆包 Vision（字节）</option>
                         <option value="openai">GPT-4o（OpenAI）</option>
-                        <option value="custom">自定义多模态接口</option>
+                        <option value="custom">自定义接口</option>
                     </select>
-                </div>
-                <div class="admin-row">
-                    <label style="font-size:13px;white-space:nowrap;">视觉 API Key：</label>
-                    <input type="password" id="visionApiKey" placeholder="视觉模型 API Key（可复用文案引擎 Key）">
-                </div>
-                <div class="admin-row">
-                    <label style="font-size:13px;white-space:nowrap;">接口地址：</label>
-                    <input type="text" id="visionEndpoint" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions">
                 </div>
                 <div class="admin-row">
                     <label style="font-size:13px;white-space:nowrap;">视觉模型名：</label>
@@ -920,17 +904,13 @@
                 <div class="admin-row">
                     <label style="font-size:13px;white-space:nowrap;">采样间隔：</label>
                     <input type="number" id="frameInterval" value="8" min="3" max="30" step="1" style="width:80px;text-align:center;">
-                    <span style="font-size:12px;color:var(--text2);">秒（每隔N秒提取一帧分析）</span>
+                    <span style="font-size:12px;color:var(--text2);">秒（每隔N秒提取一帧）</span>
                 </div>
                 <div style="margin-top:10px;display:flex;gap:10px;align-items:center;">
-                    <button class="btn btn-primary btn-sm" onclick="saveVisionConfig()">💾 保存视觉配置</button>
-                    <button class="btn btn-outline btn-sm" onclick="testVisionConnection()">🔌 测试视觉连接</button>
+                    <button class="btn btn-primary btn-sm" onclick="saveVisionConfig()">💾 保存配置</button>
+                    <button class="btn btn-outline btn-sm" onclick="testVisionConnection()">🔌 测试连接</button>
                     <span id="visionTestResult" style="font-size:12px;"></span>
                 </div>
-                <p style="font-size:11px;color:var(--text2);margin-top:8px;">
-                    💡 视觉模型用于理解视频每一帧的画面内容（人物、场景、动作、情绪等），
-                    从而实现文案与视频画面的智能匹配。不配置则使用基于时间的关键词模糊匹配。推荐使用通义千问 VL 或 GPT-4o。
-                </p>
             </div>
 
             <!-- 广告管理 -->
@@ -1286,17 +1266,14 @@
         };
 
         function getAIConfig() {
-            return loadData('aiConfig', { provider: 'deepseek', apiKey: '', endpoint: AI_PROVIDERS.deepseek.endpoint, model: AI_PROVIDERS.deepseek.model });
+            return loadData('aiConfig', { provider: 'deepseek', model: AI_PROVIDERS.deepseek.model });
         }
 
         function saveAIConfig() {
             const provider = document.getElementById('aiProviderSelect').value;
-            const apiKey = document.getElementById('aiApiKey').value.trim();
-            const endpoint = document.getElementById('aiEndpoint').value.trim();
             const model = document.getElementById('aiModel').value.trim();
-            if (!endpoint) { showToast('请输入接口地址', 'error'); return; }
             if (!model) { showToast('请输入模型名', 'error'); return; }
-            const config = { provider, apiKey, endpoint, model };
+            const config = { provider, model };
             saveData('aiConfig', config);
             updateAIEngineSelect();
             showToast('✅ AI 配置已保存', 'success');
@@ -1306,9 +1283,7 @@
             const provider = document.getElementById('aiProviderSelect').value;
             const info = AI_PROVIDERS[provider];
             if (info) {
-                document.getElementById('aiEndpoint').value = info.endpoint || '';
                 document.getElementById('aiModel').value = info.model || '';
-                document.getElementById('aiApiKey').value = '';
                 document.getElementById('aiTestResult').textContent = '';
             }
         }
@@ -1316,68 +1291,42 @@
         function loadAIConfigToAdminForm() {
             const config = getAIConfig();
             document.getElementById('aiProviderSelect').value = config.provider || 'deepseek';
-            document.getElementById('aiApiKey').value = config.apiKey || '';
-            document.getElementById('aiEndpoint').value = config.endpoint || AI_PROVIDERS[config.provider]?.endpoint || '';
             document.getElementById('aiModel').value = config.model || AI_PROVIDERS[config.provider]?.model || '';
         }
 
         async function testAIConnection() {
-            const apiKey = document.getElementById('aiApiKey').value.trim();
-            const endpoint = document.getElementById('aiEndpoint').value.trim();
-            const model = document.getElementById('aiModel').value.trim();
+            const provider = document.getElementById('aiProviderSelect').value;
             const resultSpan = document.getElementById('aiTestResult');
-
-            if (!apiKey) { resultSpan.textContent = '❌ 请先输入 API Key'; resultSpan.style.color = 'var(--red)'; return; }
-            if (!endpoint) { resultSpan.textContent = '❌ 请填写接口地址'; resultSpan.style.color = 'var(--red)'; return; }
-
             resultSpan.textContent = '⏳ 测试中...';
             resultSpan.style.color = 'var(--text2)';
 
             try {
-                const resp = await fetch(endpoint, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + apiKey,
-                    },
-                    body: JSON.stringify({
-                        model: model,
-                        messages: [{ role: 'user', content: '你好，请回复"连接成功"两个字。' }],
-                        max_tokens: 20,
-                        temperature: 0,
-                    }),
-                });
-
+                const resp = await fetch('/api/health');
                 if (resp.ok) {
-                    const data = await resp.json();
-                    const reply = data.choices?.[0]?.message?.content || '';
-                    resultSpan.textContent = '✅ 连接成功！回复：' + reply.substring(0, 30);
+                    resultSpan.textContent = '✅ Worker 在线，引擎：' + AI_PROVIDERS[provider]?.name;
                     resultSpan.style.color = 'var(--green)';
                 } else {
-                    const errText = await resp.text().catch(() => '未知错误');
-                    resultSpan.textContent = '❌ HTTP ' + resp.status + '：' + errText.substring(0, 60);
+                    resultSpan.textContent = '⚠️ Worker 异常，请检查部署';
                     resultSpan.style.color = 'var(--red)';
                 }
             } catch (e) {
-                resultSpan.textContent = '❌ 网络错误：' + e.message.substring(0, 50);
+                resultSpan.textContent = '❌ 无法连接 Worker：' + e.message.substring(0, 40);
                 resultSpan.style.color = 'var(--red)';
             }
         }
 
-        // 更新 Mode B 中的引擎选择下拉框
         function updateAIEngineSelect() {
             const select = document.getElementById('aiEngineSelect');
             const config = getAIConfig();
             select.innerHTML = '';
 
-            // 内置模拟引擎始终可选
             const builtinOpt = document.createElement('option');
             builtinOpt.value = 'builtin';
             builtinOpt.textContent = '📦 内置模拟引擎';
             select.appendChild(builtinOpt);
 
-            // 如果配置了 API Key，添加对应的真实引擎选项
-            if (config.apiKey) {
+            // 始终显示真实 AI 选项（通过 Worker 代理）
+            if (config.provider) {
                 const providerInfo = AI_PROVIDERS[config.provider] || {};
                 const opt = document.createElement('option');
                 opt.value = 'real';
@@ -1386,43 +1335,37 @@
                 select.appendChild(opt);
             }
 
-            // 如果既没有 API Key，默认选内置
-            if (!config.apiKey) {
+            if (!config.provider) {
                 builtinOpt.selected = true;
             }
         }
 
         // ==================== 视觉 AI 配置 ====================
         const VISION_PROVIDERS = {
-            qianwen:  { name: '通义千问 VL', endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', model: 'qwen-vl-plus' },
-            deepseek: { name: 'DeepSeek VL',  endpoint: 'https://api.deepseek.com/chat/completions',                        model: 'deepseek-chat' },
-            doubao:   { name: '豆包 Vision',  endpoint: 'https://ark.cn-beijing.volces.com/api/v3/chat/completions',        model: 'doubao-vision-pro' },
-            openai:   { name: 'GPT-4o',       endpoint: 'https://api.openai.com/v1/chat/completions',                       model: 'gpt-4o' },
-            custom:   { name: '自定义',       endpoint: '', model: '' },
+            qianwen:  { name: '通义千问 VL', model: 'qwen-vl-plus' },
+            deepseek: { name: 'DeepSeek VL',  model: 'deepseek-chat' },
+            doubao:   { name: '豆包 Vision',  model: 'doubao-vision-pro' },
+            openai:   { name: 'GPT-4o',       model: 'gpt-4o' },
+            custom:   { name: '自定义',       model: '' },
         };
 
         function getVisionConfig() {
-            const def = VISION_PROVIDERS.qianwen;
-            return loadData('visionConfig', { provider: 'qianwen', apiKey: '', endpoint: def.endpoint, model: def.model, frameInterval: 8 });
+            return loadData('visionConfig', { provider: 'qianwen', model: 'qwen-vl-plus', frameInterval: 8 });
         }
 
         function saveVisionConfig() {
             const provider = document.getElementById('visionProviderSelect').value;
-            const apiKey = document.getElementById('visionApiKey').value.trim();
-            const endpoint = document.getElementById('visionEndpoint').value.trim();
             const model = document.getElementById('visionModel').value.trim();
             const frameInterval = parseInt(document.getElementById('frameInterval').value) || 8;
-            if (!endpoint) { showToast('请输入视觉接口地址', 'error'); return; }
-            const config = { provider, apiKey, endpoint, model, frameInterval };
+            const config = { provider, model, frameInterval };
             saveData('visionConfig', config);
-            showToast('✅ 视觉 AI 配置已保存', 'success');
+            showToast('✅ 视觉配置已保存', 'success');
         }
 
         function onVisionProviderChange() {
             const provider = document.getElementById('visionProviderSelect').value;
             const info = VISION_PROVIDERS[provider];
             if (info) {
-                document.getElementById('visionEndpoint').value = info.endpoint || '';
                 document.getElementById('visionModel').value = info.model || '';
             }
         }
@@ -1430,39 +1373,24 @@
         function loadVisionConfigToAdminForm() {
             const config = getVisionConfig();
             document.getElementById('visionProviderSelect').value = config.provider || 'qianwen';
-            document.getElementById('visionApiKey').value = config.apiKey || '';
-            document.getElementById('visionEndpoint').value = config.endpoint || VISION_PROVIDERS[config.provider]?.endpoint || '';
             document.getElementById('visionModel').value = config.model || VISION_PROVIDERS[config.provider]?.model || '';
             document.getElementById('frameInterval').value = config.frameInterval || 8;
         }
 
         async function testVisionConnection() {
-            const apiKey = document.getElementById('visionApiKey').value.trim();
-            const endpoint = document.getElementById('visionEndpoint').value.trim();
-            const model = document.getElementById('visionModel').value.trim();
             const span = document.getElementById('visionTestResult');
-            if (!apiKey) { span.textContent = '❌ 请输入 API Key'; span.style.color = 'var(--red)'; return; }
             span.textContent = '⏳ 测试中...'; span.style.color = 'var(--text2)';
             try {
-                const resp = await fetch(endpoint, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
-                    body: JSON.stringify({
-                        model: model,
-                        messages: [{ role: 'user', content: '请回复"视觉连接成功"六个字，不要其他内容。' }],
-                        max_tokens: 20, temperature: 0,
-                    }),
-                });
+                const resp = await fetch('/api/health');
                 if (resp.ok) {
-                    span.textContent = '✅ 连接成功';
+                    span.textContent = '✅ Worker 在线';
                     span.style.color = 'var(--green)';
                 } else {
-                    const e = await resp.text().catch(() => '');
-                    span.textContent = '❌ HTTP ' + resp.status + '：' + e.substring(0, 60);
+                    span.textContent = '⚠️ Worker 异常';
                     span.style.color = 'var(--red)';
                 }
             } catch (e) {
-                span.textContent = '❌ 网络错误：' + e.message.substring(0, 50);
+                span.textContent = '❌ 无法连接：' + e.message.substring(0, 40);
                 span.style.color = 'var(--red)';
             }
         }
@@ -1531,70 +1459,54 @@
         // ==================== AI 画面描述 ====================
         async function describeFramesWithAI(frames, movieName) {
             const config = getVisionConfig();
-            if (!config.apiKey || !config.endpoint) return null;
+            if (!config.provider) return null;
 
-            const results = [];
             const logDiv = document.getElementById('visionLog');
             logDiv.style.display = 'block';
 
-            for (let i = 0; i < frames.length; i++) {
-                const f = frames[i];
-                if (f.error || !f.base64) {
-                    results.push({ time: f.time, description: '[画面提取失败]', index: f.index });
-                    continue;
+            // 批量发送所有帧到 Worker（单次请求）
+            logDiv.innerHTML += `<div>👁️ 正在发送 ${frames.length} 个画面到 AI 分析...</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+
+            // 过滤掉错误帧
+            const validFrames = frames.filter(f => !f.error && f.base64);
+            if (validFrames.length === 0) return null;
+
+            try {
+                const resp = await fetch('/api/vision', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        provider: config.provider,
+                        model: config.model,
+                        frames: validFrames.map(f => ({ time: f.time, base64: f.base64, index: f.index })),
+                        movieName,
+                    }),
+                });
+
+                if (!resp.ok) {
+                    throw new Error('Worker 返回错误 ' + resp.status);
                 }
 
-                const timestamp = formatTime(f.time);
-                logDiv.innerHTML += `<div>👁️ AI 正在分析 ${timestamp} 的画面...</div>`;
-                logDiv.scrollTop = logDiv.scrollHeight;
+                const data = await resp.json();
+                const results = data.results || [];
 
-                try {
-                    // 移除 data:image/jpeg;base64, 前缀
-                    const base64Data = f.base64.split(',')[1] || f.base64;
-
-                    const resp = await fetch(config.endpoint, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': 'Bearer ' + config.apiKey,
-                        },
-                        body: JSON.stringify({
-                            model: config.model,
-                            messages: [{
-                                role: 'user',
-                                content: [
-                                    {
-                                        type: 'text',
-                                        text: '请用一句简短的中文描述这个电影画面的内容。描述应包含：场景类型（室内/室外/白天/夜晚）、主要人物或物体、正在发生的动作、画面情绪/氛围。限40字以内，只输出描述本身。',
-                                    },
-                                    {
-                                        type: 'image_url',
-                                        image_url: { url: 'data:image/jpeg;base64,' + base64Data },
-                                    },
-                                ],
-                            }],
-                            max_tokens: 80,
-                            temperature: 0.3,
-                        }),
-                    });
-
-                    if (resp.ok) {
-                        const data = await resp.json();
-                        const desc = data.choices?.[0]?.message?.content?.trim() || '[AI 未返回描述]';
-                        results.push({ time: f.time, description: desc, index: f.index });
-                        logDiv.innerHTML += `<div style="color:var(--green);">✅ ${timestamp}：${desc}</div>`;
+                results.forEach(r => {
+                    const ts = formatTime(r.time);
+                    if (r.description && !r.description.includes('失败') && !r.description.includes('错误')) {
+                        logDiv.innerHTML += `<div style="color:var(--green);">✅ ${ts}：${r.description}</div>`;
                     } else {
-                        throw new Error('HTTP ' + resp.status);
+                        logDiv.innerHTML += `<div style="color:var(--red);">❌ ${ts}：${r.description || '失败'}</div>`;
                     }
-                } catch (e) {
-                    results.push({ time: f.time, description: '[AI 分析失败]', index: f.index });
-                    logDiv.innerHTML += `<div style="color:var(--red);">❌ ${timestamp}：分析失败（${e.message}）</div>`;
-                }
+                });
 
                 logDiv.scrollTop = logDiv.scrollHeight;
+                return results;
+            } catch (e) {
+                logDiv.innerHTML += `<div style="color:var(--red);">❌ 视觉分析异常：${e.message}</div>`;
+                logDiv.scrollTop = logDiv.scrollHeight;
+                return null;
             }
-
-            return results;
         }
 
         // ==================== 关键词降级匹配（无视觉AI时） ====================
@@ -1740,63 +1652,24 @@
             return m + ':' + String(s).padStart(2, '0');
         }
 
-        // ==================== 真实 AI API 调用 ====================
+        // ==================== 真实 AI API 调用（通过 Worker 代理） ====================
         async function callAIAPI(movieName, targetCount, styleSample) {
             const config = getAIConfig();
-            if (!config.apiKey || !config.endpoint) {
-                return null; // 未配置，返回 null 则降级为模拟生成
-            }
-
-            // 构建 Prompt
-            let systemPrompt = `你是一位专业的电影解说文案写手。请根据以下要求撰写一篇电影解说文案。
-
-【电影名称】《${movieName}》
-【目标字数】约 ${targetCount} 字（请严格控制在此字数的 ±15% 范围内）
-【格式要求】使用自然段分隔，每个段落之间用空行隔开。不要使用 Markdown 格式，直接输出纯文本。`;
-
-            if (styleSample) {
-                systemPrompt += `
-
-【风格模仿样本】以下是用户提供的参考文案，请仔细分析其写作风格并在生成文案时尽可能模仿：
----
-${styleSample}
----
-请分析样本以下特征并严格模仿：
-1. 句式结构：长句还是短句？复杂句还是简单句？
-2. 语气风格：口语化/正式/幽默/文艺/犀利？
-3. 用词习惯：偏好的词汇、语气词、转折方式
-4. 段落节奏：每段长度、段落之间的过渡方式
-5. 情绪表达：克制/奔放、客观/主观、冷静/热情
-6. 是否使用 emoji、感叹号、反问句等修辞手法
-
-请在生成的文案中复现上述所有风格特征，让人读起来感觉是同一个作者写的。`;
-            } else {
-                systemPrompt += `
-
-【风格要求】以自然流畅的中文撰写，语气亲切但不随意，适合作为电影解说视频的旁白配音文案。适当融入对剧情的分析、角色的解读、视听语言的点评。`;
-            }
-
-            const userMessage = `请为电影《${movieName}》撰写一篇约 ${targetCount} 字的解说文案。${styleSample ? '务必模仿我提供的风格样本。' : ''}`;
+            if (!config.provider) return null;
 
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 120000); // 2分钟超时
+            const timeoutId = setTimeout(() => controller.abort(), 120000);
 
             try {
-                const resp = await fetch(config.endpoint, {
+                const resp = await fetch('/api/copywriting', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + config.apiKey,
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
+                        provider: config.provider,
                         model: config.model,
-                        messages: [
-                            { role: 'system', content: systemPrompt },
-                            { role: 'user', content: userMessage },
-                        ],
-                        max_tokens: Math.min(targetCount * 3, 16000),
-                        temperature: 0.85,
-                        top_p: 0.9,
+                        movieName,
+                        targetCount,
+                        styleSample,
                     }),
                     signal: controller.signal,
                 });
@@ -1804,22 +1677,16 @@ ${styleSample}
                 clearTimeout(timeoutId);
 
                 if (!resp.ok) {
-                    const errBody = await resp.text().catch(() => '');
-                    throw new Error('API 返回错误 ' + resp.status + (errBody ? '：' + errBody.substring(0, 100) : ''));
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err.error || 'Worker 返回错误 ' + resp.status);
                 }
 
                 const data = await resp.json();
-                const content = data.choices?.[0]?.message?.content?.trim() || '';
-
-                if (!content) {
-                    throw new Error('API 返回了空内容');
-                }
-
-                return content;
+                return data.content || '';
             } catch (e) {
                 clearTimeout(timeoutId);
                 if (e.name === 'AbortError') {
-                    throw new Error('请求超时（超过120秒），请尝试减少目标字数或检查网络');
+                    throw new Error('请求超时，请减少目标字数或检查 Worker');
                 }
                 throw e;
             }
@@ -2377,7 +2244,7 @@ ${styleSample}
 
                 // ---- 步骤2：AI 识别画面内容 ----
                 let frameDescriptions = null;
-                if (frames && visionConfig.apiKey) {
+                if (frames && visionConfig.provider) {
                     updateProgress(20, '正在使用 AI 识别视频画面...', 2);
                     document.getElementById('step2').classList.add('active');
                     try {
@@ -2474,15 +2341,100 @@ ${styleSample}
 
         // ==================== 下载与预览 ====================
         function downloadVideo() {
-            if (!APP_STATE.uploadedFile) { showToast('没有可下载的视频', 'error'); return; }
-            showToast('⏳ 模拟下载中...（实际使用需连接后端处理）', 'success');
-            // 实际应用中这里会触发真实下载
-            setTimeout(() => showToast('💡 提示：当前为演示模式，实际部署后此处将下载处理后的视频'), 1500);
+            if (!APP_STATE.uploadedFile) { showToast('没有可处理的文件', 'error'); return; }
+
+            // 导出剪辑时间线 + 文案为文件
+            const timelineEl = document.getElementById('editTimeline');
+            let content = '';
+            content += '===== AI 电影解说剪辑方案 =====\n\n';
+            content += '影片：' + APP_STATE.uploadedFile.name + '\n\n';
+            content += '----- 解说文案 -----\n\n';
+            if (APP_STATE.generatedCopy) {
+                content += APP_STATE.generatedCopy + '\n\n';
+            } else {
+                content += document.getElementById('userCopywriting').value + '\n\n';
+            }
+            if (timelineEl.style.display !== 'none') {
+                content += '----- 剪辑时间线 -----\n\n';
+                const items = document.getElementById('timelineItems').querySelectorAll('div[style]');
+                items.forEach(item => {
+                    const text = item.textContent.replace(/\s+/g, ' ').trim();
+                    if (text) content += text + '\n';
+                });
+            }
+
+            const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = '剪辑方案_' + APP_STATE.uploadedFile.name.replace(/\.[^.]+$/, '') + '.txt';
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('✅ 剪辑方案已导出', 'success');
         }
 
         function previewVideo() {
-            showToast('👁️ 模拟预览中...（实际使用需连接后端处理）', 'success');
-            // 实际应用中这里会打开视频预览
+            if (!APP_STATE.uploadedFile) { showToast('请先上传视频文件', 'error'); return; }
+
+            // 创建视频预览弹窗
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;';
+
+            const closeBtn = document.createElement('button');
+            closeBtn.textContent = '✕ 关闭';
+            closeBtn.style.cssText = 'position:absolute;top:16px;right:16px;background:var(--accent);color:#fff;border:none;padding:10px 20px;border-radius:25px;font-size:14px;cursor:pointer;z-index:1;font-family:inherit;';
+            closeBtn.onclick = () => { overlay.remove(); };
+
+            const video = document.createElement('video');
+            video.src = URL.createObjectURL(APP_STATE.uploadedFile);
+            video.controls = true;
+            video.style.cssText = 'max-width:90vw;max-height:70vh;border-radius:8px;';
+            video.onloadedmetadata = () => { video.play().catch(() => {}); };
+
+            // 标题
+            const title = document.createElement('div');
+            title.textContent = '🎬 原片预览 — 请对照时间线确认剪辑方案';
+            title.style.cssText = 'color:#fff;font-size:16px;margin-bottom:16px;';
+
+            // 如果有时间线数据，显示快速跳转
+            const timelineDiv = document.createElement('div');
+            timelineDiv.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;max-width:90vw;margin-top:12px;justify-content:center;';
+            const timelineItems = document.getElementById('timelineItems');
+            if (timelineItems && timelineItems.children.length > 0) {
+                Array.from(timelineItems.children).forEach((item, i) => {
+                    const btn = document.createElement('button');
+                    const match = item.textContent.match(/(\d+):(\d+)\s*~\s*(\d+):(\d+)/);
+                    btn.textContent = '段落' + (i + 1);
+                    btn.style.cssText = 'background:var(--surface2);color:var(--text);border:1px solid var(--border);padding:6px 14px;border-radius:16px;font-size:12px;cursor:pointer;font-family:inherit;transition:0.2s;';
+                    btn.onmouseenter = () => { btn.style.background = 'var(--accent)'; btn.style.color = '#fff'; };
+                    btn.onmouseleave = () => { btn.style.background = 'var(--surface2)'; btn.style.color = 'var(--text)'; };
+                    if (match) {
+                        const min = parseInt(match[1]) * 60 + parseInt(match[2]);
+                        btn.onclick = () => { video.currentTime = min; video.play().catch(() => {}); };
+                        btn.title = '跳转到 ' + match[1] + ':' + match[2];
+                    }
+                    timelineDiv.appendChild(btn);
+                });
+            }
+
+            overlay.appendChild(closeBtn);
+            overlay.appendChild(title);
+            overlay.appendChild(video);
+            overlay.appendChild(timelineDiv);
+            document.body.appendChild(overlay);
+
+            // 关闭时释放
+            overlay.addEventListener('click', function(e) {
+                if (e.target === overlay) {
+                    URL.revokeObjectURL(video.src);
+                    overlay.remove();
+                }
+            });
+            closeBtn.addEventListener('click', function() {
+                URL.revokeObjectURL(video.src);
+            });
+
+            showToast('👁️ 正在播放原片，请参考时间线对照剪辑方案');
         }
 
         // ==================== 字幕预览 ====================

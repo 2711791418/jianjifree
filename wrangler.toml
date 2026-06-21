@@ -1,0 +1,18 @@
+name = "ai-video-editor"
+compatibility_date = "2025-01-01"
+
+# ====== 在这里填你的 API Key ======
+# 填好后在 Cloudflare Pages 后台 → Settings → Environment variables 也配一份
+# 本地开发用这个文件，生产环境在后台配（下一行注释掉也行）
+[vars]
+# DeepSeek: https://platform.deepseek.com（最便宜）
+DEEPSEEK_API_KEY = ""
+
+# 通义千问: https://dashscope.aliyun.com
+# QIANWEN_API_KEY = ""
+
+# 豆包: https://console.volcengine.com
+# DOUBAO_API_KEY = ""
+
+# 元宝/腾讯混元: https://cloud.tencent.com
+# YUANBAO_API_KEY = ""
