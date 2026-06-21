@@ -678,14 +678,27 @@
                 <div class="card result-box" id="completeBox">
                     <div style="text-align:center;padding:20px;">
                         <div style="font-size:48px;">🎉</div>
-                        <div style="font-size:18px;font-weight:600;margin:10px 0;">视频生成完成！</div>
-                        <div style="color:var(--text2);font-size:14px;">你的电影解说视频已经制作完成</div>
+                        <div style="font-size:18px;font-weight:600;margin:10px 0;">AI 剪辑匹配完成！</div>
+                        <div style="color:var(--text2);font-size:14px;">文案已匹配到视频时间线，点击下方按钮渲染成品视频</div>
                         <div class="btn-group" style="margin-top:16px;justify-content:center;">
-                            <button class="btn btn-primary" onclick="downloadVideo()">⬇️ 下载视频</button>
-                            <button class="btn btn-outline" onclick="previewVideo()">👁️ 预览视频</button>
+                            <button class="btn btn-primary" onclick="startRender()" id="btnRender" style="font-size:16px;padding:12px 32px;">🎬 渲染导出视频</button>
+                            <button class="btn btn-outline" onclick="previewVideo()">👁️ 实时预览</button>
                             <button class="btn btn-redo btn-sm" onclick="redoEdit()">🔄 重新剪辑</button>
                         </div>
+                        <div style="font-size:11px;color:var(--text2);margin-top:8px;">渲染在浏览器本地完成，处理时间 = 视频时长</div>
                     </div>
+                </div>
+
+                <!-- 渲染进度 -->
+                <div class="card" id="renderCard" style="display:none;">
+                    <div class="card-title"><span class="dot" style="background:var(--green);"></span>🎬 正在渲染视频</div>
+                    <div style="color:var(--text2);font-size:13px;margin-bottom:10px;">使用 Canvas 逐帧烧录字幕 + 合成画面，浏览器本地处理</div>
+                    <div class="progress-bar-wrap">
+                        <div class="progress-bar-fill" id="renderProgressBar" style="background:linear-gradient(90deg, var(--green), #6fcf97);"></div>
+                    </div>
+                    <div class="progress-text" id="renderProgressText">准备渲染...</div>
+                    <div id="renderTimeEstimate" style="font-size:11px;color:var(--text2);margin-top:4px;"></div>
+                    <button class="btn btn-redo btn-sm" onclick="cancelRender()" id="btnCancelRender" style="margin-top:10px;">⏹ 取消渲染</button>
                 </div>
             </div>
 
@@ -2322,8 +2335,11 @@
         function redoEdit() {
             APP_STATE.isEditing = false;
             APP_STATE.editCompleted = false;
+            renderState.active = false;
+            renderState.cancel = true;
             document.getElementById('progressCard').style.display = 'none';
             document.getElementById('completeBox').classList.remove('show');
+            document.getElementById('renderCard').style.display = 'none';
             document.getElementById('btnRedoEdit').style.display = 'none';
             document.getElementById('editTimeline').style.display = 'none';
             document.getElementById('visionLog').style.display = 'none';
@@ -2340,6 +2356,273 @@
         }
 
         // ==================== 下载与预览 ====================
+        // ==================== 视频渲染引擎 ====================
+        let renderState = { active: false, cancel: false };
+
+        async function startRender() {
+            if (!APP_STATE.uploadedFile) { showToast('请先上传视频', 'error'); return; }
+            const copywriting = APP_STATE.generatedCopy ||
+                document.getElementById('userCopywriting').value.trim();
+            if (!copywriting) { showToast('没有文案内容', 'error'); return; }
+
+            // 显示渲染卡片
+            document.getElementById('completeBox').classList.remove('show');
+            const renderCard = document.getElementById('renderCard');
+            renderCard.style.display = 'block';
+            renderCard.scrollIntoView({ behavior: 'smooth' });
+
+            renderState.active = true;
+            renderState.cancel = false;
+            document.getElementById('btnCancelRender').style.display = 'inline-block';
+
+            const video = document.createElement('video');
+            video.src = URL.createObjectURL(APP_STATE.uploadedFile);
+            video.preload = 'auto';
+            video.muted = true; // 先静音，后面单独处理音频
+
+            await new Promise((resolve, reject) => {
+                video.onloadedmetadata = resolve;
+                video.onerror = reject;
+            });
+
+            const duration = video.duration;
+            const fps = 24;
+            const totalFrames = Math.ceil(duration * fps);
+
+            // 准备字幕数据
+            const paragraphs = copywriting.split(/\n\n+/).filter(p => p.trim().length > 0);
+            // 将每个段落按句子拆分，均匀分配到时间段
+            const allSentences = [];
+            paragraphs.forEach(p => {
+                const sents = p.split(/[。！？\n]+/).filter(s => s.trim().length > 5);
+                sents.forEach(s => allSentences.push(s.trim()));
+            });
+            if (allSentences.length === 0) allSentences.push(copywriting);
+
+            // 从时间线获取匹配数据
+            let timelineMatches = [];
+            const timelineItems = document.getElementById('timelineItems');
+            if (timelineItems && timelineItems.children.length > 0) {
+                Array.from(timelineItems.children).forEach(item => {
+                    const match = item.textContent.match(/(\d+):(\d+)\s*~\s*(\d+):(\d+)/);
+                    if (match) {
+                        timelineMatches.push({
+                            start: parseInt(match[1]) * 60 + parseInt(match[2]),
+                            end: parseInt(match[3]) * 60 + parseInt(match[4]),
+                        });
+                    }
+                });
+            }
+
+            // 如果没有时间线，均匀分配
+            if (timelineMatches.length === 0) {
+                const segLen = duration / allSentences.length;
+                allSentences.forEach((_, i) => {
+                    timelineMatches.push({ start: i * segLen, end: (i + 1) * segLen });
+                });
+            }
+
+            // 每个时间段分配句子
+            const timedSubtitles = [];
+            timelineMatches.forEach((tm, i) => {
+                const sentsForSegment = [];
+                const startI = Math.floor(i * allSentences.length / timelineMatches.length);
+                const endI = Math.floor((i + 1) * allSentences.length / timelineMatches.length);
+                for (let j = startI; j < Math.min(endI, allSentences.length); j++) {
+                    sentsForSegment.push(allSentences[j]);
+                }
+                if (sentsForSegment.length > 0) {
+                    const subDuration = (tm.end - tm.start) / sentsForSegment.length;
+                    sentsForSegment.forEach((s, si) => {
+                        timedSubtitles.push({
+                            text: s,
+                            startTime: tm.start + si * subDuration,
+                            endTime: tm.start + (si + 1) * subDuration,
+                        });
+                    });
+                }
+            });
+
+            // 创建 Canvas
+            const canvas = document.createElement('canvas');
+            const maxW = 1280;
+            const scale = Math.min(1, maxW / video.videoWidth);
+            canvas.width = video.videoWidth * scale;
+            canvas.height = video.videoHeight * scale;
+            const ctx = canvas.getContext('2d');
+
+            // Canvas 视频流
+            const canvasStream = canvas.captureStream(fps);
+
+            // 获取视频音频
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const source = audioCtx.createMediaElementSource(video);
+            const dest = audioCtx.createMediaStreamDestination();
+            source.connect(dest);
+            source.connect(audioCtx.destination); // 同时播放以便听到
+            const audioTrack = dest.stream.getAudioTracks()[0];
+            if (audioTrack) canvasStream.addTrack(audioTrack);
+
+            // MediaRecorder
+            const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ?
+                'video/webm;codecs=vp9' : 'video/webm;codecs=vp8';
+            const chunks = [];
+            const recorder = new MediaRecorder(canvasStream, {
+                mimeType,
+                videoBitsPerSecond: 3000000,
+            });
+            recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+
+            const startTime = Date.now();
+            const updateUI = () => {
+                if (!renderState.active) return;
+                const pct = video.currentTime / duration * 100;
+                document.getElementById('renderProgressBar').style.width = pct + '%';
+                const elapsed = (Date.now() - startTime) / 1000;
+                const remaining = (duration - video.currentTime) * (elapsed / Math.max(video.currentTime, 0.1));
+                document.getElementById('renderProgressText').textContent =
+                    `正在渲染... ${formatTime(video.currentTime)} / ${formatTime(duration)}`;
+                document.getElementById('renderTimeEstimate').textContent =
+                    '预计剩余 ' + formatTime(Math.max(0, remaining));
+            };
+
+            const uiTimer = setInterval(updateUI, 500);
+
+            // 逐帧绘制
+            function drawFrame() {
+                if (!renderState.active || renderState.cancel) return;
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                // 找当前时间对应的字幕
+                const t = video.currentTime;
+                const subs = timedSubtitles.filter(s => t >= s.startTime && t <= s.endTime);
+                if (subs.length > 0) {
+                    const text = subs.map(s => s.text).join(' ');
+                    drawSubtitle(ctx, text, canvas.width, canvas.height);
+                }
+
+                if (!video.ended && !video.paused) {
+                    requestAnimationFrame(drawFrame);
+                }
+            }
+
+            function drawSubtitle(ctx, text, w, h) {
+                const fontSize = APP_STATE.currentSubtitleSize * 2; // Canvas 需要更大字号
+                const fontFamily = APP_STATE.currentSubtitleFont.split(',')[0].replace(/['"]/g, '');
+                ctx.save();
+                ctx.font = `bold ${fontSize}px ${fontFamily}, "PingFang SC", "Microsoft YaHei", sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+
+                const maxWidth = w * 0.85;
+                const lines = wrapText(ctx, text, maxWidth);
+                const lineHeight = fontSize * 1.5;
+                const totalHeight = lines.length * lineHeight;
+                const y = h - h * 0.08;
+
+                // 背景
+                if (APP_STATE.currentSubtitleBg !== 'none') {
+                    ctx.fillStyle = APP_STATE.currentSubtitleBg;
+                    const bgW = maxWidth + 40;
+                    const bgH = totalHeight + 20;
+                    const bgX = w / 2 - bgW / 2;
+                    const bgY = y - totalHeight - 5;
+                    ctx.fillRect(bgX, bgY, bgW, bgH);
+                }
+
+                // 描边
+                if (APP_STATE.currentSubtitleStroke !== 'none') {
+                    const strokeInfo = APP_STATE.currentSubtitleStroke.split(' ');
+                    ctx.strokeStyle = strokeInfo[1] || '#000';
+                    ctx.lineWidth = parseInt(strokeInfo[0]) * 3 || 6;
+                    lines.forEach((line, i) => {
+                        const lineY = y - (lines.length - 1 - i) * lineHeight;
+                        ctx.strokeText(line, w / 2, lineY);
+                    });
+                }
+
+                // 文字
+                ctx.fillStyle = APP_STATE.currentSubtitleColor;
+                lines.forEach((line, i) => {
+                    const lineY = y - (lines.length - 1 - i) * lineHeight;
+                    ctx.fillText(line, w / 2, lineY);
+                });
+
+                ctx.restore();
+            }
+
+            function wrapText(ctx, text, maxWidth) {
+                const lines = [];
+                let current = '';
+                for (let i = 0; i < text.length; i++) {
+                    const test = current + text[i];
+                    if (ctx.measureText(test).width > maxWidth && current.length > 0) {
+                        lines.push(current);
+                        current = text[i];
+                    } else {
+                        current = test;
+                    }
+                }
+                if (current) lines.push(current);
+                return lines.length > 0 ? lines : [text];
+            }
+
+            // 开始渲染
+            document.getElementById('renderProgressText').textContent = '正在初始化渲染...';
+            video.currentTime = 0;
+            video.muted = false; // 恢复音频以捕获
+            video.play().catch(() => {});
+
+            recorder.start();
+
+            video.onplay = () => {
+                document.getElementById('renderProgressText').textContent = '正在渲染...';
+                requestAnimationFrame(drawFrame);
+            };
+
+            video.onended = () => {
+                clearInterval(uiTimer);
+                recorder.stop();
+                renderState.active = false;
+                document.getElementById('btnCancelRender').style.display = 'none';
+                document.getElementById('renderProgressBar').style.width = '100%';
+                document.getElementById('renderProgressText').textContent = '正在封装视频文件...';
+                document.getElementById('renderTimeEstimate').textContent = '';
+
+                recorder.onstop = () => {
+                    const blob = new Blob(chunks, { type: mimeType });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    const outName = (APP_STATE.uploadedFile.name.replace(/\.[^.]+$/, '') || 'output') + '_解说版.webm';
+                    a.download = outName;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    URL.revokeObjectURL(video.src);
+                    audioCtx.close();
+
+                    document.getElementById('renderProgressText').textContent = '✅ 渲染完成！视频已自动下载';
+                    document.getElementById('btnCancelRender').style.display = 'none';
+                    showToast('✅ 视频渲染完成！字幕已烧录到视频中', 'success');
+                };
+            };
+
+            video.onerror = () => {
+                clearInterval(uiTimer);
+                renderState.active = false;
+                document.getElementById('renderProgressText').textContent = '❌ 渲染失败';
+                showToast('渲染出错，请重试', 'error');
+            };
+        }
+
+        function cancelRender() {
+            renderState.cancel = true;
+            renderState.active = false;
+            document.getElementById('renderProgressText').textContent = '⏹ 已取消';
+            document.getElementById('btnCancelRender').style.display = 'none';
+            showToast('渲染已取消');
+        }
+
         function downloadVideo() {
             if (!APP_STATE.uploadedFile) { showToast('没有可处理的文件', 'error'); return; }
 
@@ -2376,65 +2659,151 @@
         function previewVideo() {
             if (!APP_STATE.uploadedFile) { showToast('请先上传视频文件', 'error'); return; }
 
-            // 创建视频预览弹窗
-            const overlay = document.createElement('div');
-            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;';
+            // 解析文案（优先用生成的，否则用输入的）
+            const copywriting = APP_STATE.generatedCopy ||
+                document.getElementById('userCopywriting').value.trim();
+            if (!copywriting) { showToast('没有文案内容', 'error'); return; }
 
+            // 按句子拆分文案
+            const sentences = copywriting.split(/[。！？\n]+/).filter(s => s.trim().length > 5);
+            if (sentences.length === 0) { sentences.push(copywriting); }
+
+            // 创建弹窗
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;';
+
+            // 关闭按钮
             const closeBtn = document.createElement('button');
             closeBtn.textContent = '✕ 关闭';
-            closeBtn.style.cssText = 'position:absolute;top:16px;right:16px;background:var(--accent);color:#fff;border:none;padding:10px 20px;border-radius:25px;font-size:14px;cursor:pointer;z-index:1;font-family:inherit;';
-            closeBtn.onclick = () => { overlay.remove(); };
+            closeBtn.style.cssText = 'position:absolute;top:16px;right:16px;background:var(--accent);color:#fff;border:none;padding:10px 20px;border-radius:25px;font-size:14px;cursor:pointer;z-index:10;font-family:inherit;';
+
+            // 视频容器（相对定位以叠加字幕）
+            const videoContainer = document.createElement('div');
+            videoContainer.style.cssText = 'position:relative;max-width:90vw;max-height:70vh;';
 
             const video = document.createElement('video');
             video.src = URL.createObjectURL(APP_STATE.uploadedFile);
             video.controls = true;
-            video.style.cssText = 'max-width:90vw;max-height:70vh;border-radius:8px;';
-            video.onloadedmetadata = () => { video.play().catch(() => {}); };
+            video.style.cssText = 'max-width:90vw;max-height:70vh;border-radius:8px;display:block;';
 
-            // 标题
-            const title = document.createElement('div');
-            title.textContent = '🎬 原片预览 — 请对照时间线确认剪辑方案';
-            title.style.cssText = 'color:#fff;font-size:16px;margin-bottom:16px;';
+            // 字幕叠加层
+            const subtitleOverlay = document.createElement('div');
+            subtitleOverlay.style.cssText =
+                'position:absolute;bottom:10%;left:50%;transform:translateX(-50%);' +
+                'padding:6px 18px;border-radius:8px;text-align:center;pointer-events:none;' +
+                'font-family:' + APP_STATE.currentSubtitleFont + ';' +
+                'font-size:' + APP_STATE.currentSubtitleSize + 'px;' +
+                'color:' + APP_STATE.currentSubtitleColor + ';' +
+                'text-shadow:' + (APP_STATE.currentSubtitleStroke === 'none' ? 'none' : APP_STATE.currentSubtitleStroke) + ';' +
+                'background:' + (APP_STATE.currentSubtitleBg === 'none' ? 'transparent' : APP_STATE.currentSubtitleBg) + ';' +
+                'transition:opacity 0.3s;opacity:0;max-width:85%;line-height:1.6;';
+            subtitleOverlay.textContent = '字幕将在此显示';
 
-            // 如果有时间线数据，显示快速跳转
+            videoContainer.appendChild(video);
+            videoContainer.appendChild(subtitleOverlay);
+
+            // 信息栏
+            const infoBar = document.createElement('div');
+            infoBar.style.cssText = 'color:#fff;font-size:14px;margin-bottom:12px;display:flex;gap:20px;align-items:center;flex-wrap:wrap;justify-content:center;';
+            infoBar.innerHTML = '<span>🎬 实时预览模式</span><span>💬 字幕叠加</span><span>🔊 TTS配音</span><span style="color:var(--text2);font-size:12px;">（非最终渲染视频）</span>';
+
+            // 段落跳转按钮
             const timelineDiv = document.createElement('div');
-            timelineDiv.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;max-width:90vw;margin-top:12px;justify-content:center;';
+            timelineDiv.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;max-width:90vw;margin-top:10px;justify-content:center;';
             const timelineItems = document.getElementById('timelineItems');
             if (timelineItems && timelineItems.children.length > 0) {
                 Array.from(timelineItems.children).forEach((item, i) => {
                     const btn = document.createElement('button');
                     const match = item.textContent.match(/(\d+):(\d+)\s*~\s*(\d+):(\d+)/);
                     btn.textContent = '段落' + (i + 1);
-                    btn.style.cssText = 'background:var(--surface2);color:var(--text);border:1px solid var(--border);padding:6px 14px;border-radius:16px;font-size:12px;cursor:pointer;font-family:inherit;transition:0.2s;';
-                    btn.onmouseenter = () => { btn.style.background = 'var(--accent)'; btn.style.color = '#fff'; };
-                    btn.onmouseleave = () => { btn.style.background = 'var(--surface2)'; btn.style.color = 'var(--text)'; };
+                    btn.style.cssText = 'background:var(--surface2);color:var(--text);border:1px solid var(--border);padding:5px 12px;border-radius:14px;font-size:11px;cursor:pointer;font-family:inherit;';
                     if (match) {
-                        const min = parseInt(match[1]) * 60 + parseInt(match[2]);
-                        btn.onclick = () => { video.currentTime = min; video.play().catch(() => {}); };
-                        btn.title = '跳转到 ' + match[1] + ':' + match[2];
+                        const sec = parseInt(match[1]) * 60 + parseInt(match[2]);
+                        btn.onclick = () => { video.currentTime = sec; video.play().catch(() => {}); };
                     }
                     timelineDiv.appendChild(btn);
                 });
             }
 
+            // ======== 字幕 + TTS 同步引擎 ========
+            let subtitleTimer = null;
+            let currentIdx = -1;
+            let ttsUtterance = null;
+
+            function stopAll() {
+                if (subtitleTimer) clearInterval(subtitleTimer);
+                if (window.speechSynthesis) window.speechSynthesis.cancel();
+            }
+
+            function updateSubtitle() {
+                if (!video.duration || video.paused) return;
+                const t = video.currentTime;
+                const duration = video.duration;
+                // 根据当前播放时间计算应该显示哪句
+                const idx = Math.min(sentences.length - 1, Math.floor((t / duration) * sentences.length));
+
+                if (idx !== currentIdx) {
+                    currentIdx = idx;
+                    subtitleOverlay.textContent = sentences[idx].trim();
+                    subtitleOverlay.style.opacity = '1';
+
+                    // TTS 配音
+                    if (window.speechSynthesis && sentences[idx].trim().length > 0) {
+                        window.speechSynthesis.cancel();
+                        ttsUtterance = new SpeechSynthesisUtterance(sentences[idx].trim());
+                        const voices = window.speechSynthesis.getVoices();
+                        const selectedName = document.getElementById('voiceSelect').value;
+                        const voice = voices.find(v => v.name === selectedName);
+                        if (voice) ttsUtterance.voice = voice;
+                        ttsUtterance.rate = APP_STATE.currentVoiceRate;
+                        ttsUtterance.pitch = APP_STATE.currentVoicePitch;
+                        ttsUtterance.volume = APP_STATE.currentVoiceVolume;
+                        ttsUtterance.lang = 'zh-CN';
+                        window.speechSynthesis.speak(ttsUtterance);
+                    }
+                }
+            }
+
+            video.onplay = () => {
+                subtitleTimer = setInterval(updateSubtitle, 300);
+            };
+            video.onpause = () => {
+                if (subtitleTimer) clearInterval(subtitleTimer);
+                if (window.speechSynthesis) window.speechSynthesis.cancel();
+                subtitleOverlay.style.opacity = '0';
+            };
+            video.onended = () => {
+                if (subtitleTimer) clearInterval(subtitleTimer);
+                subtitleOverlay.style.opacity = '0';
+                if (window.speechSynthesis) window.speechSynthesis.cancel();
+            };
+            video.onseeked = () => {
+                currentIdx = -1; // 重置以触发新字幕
+                if (window.speechSynthesis) window.speechSynthesis.cancel();
+            };
+
+            // 关闭清理
+            function cleanup() {
+                stopAll();
+                URL.revokeObjectURL(video.src);
+                overlay.remove();
+            }
+            closeBtn.onclick = cleanup;
+            overlay.addEventListener('click', function(e) {
+                if (e.target === overlay) cleanup();
+            });
+
             overlay.appendChild(closeBtn);
-            overlay.appendChild(title);
-            overlay.appendChild(video);
+            overlay.appendChild(infoBar);
+            overlay.appendChild(videoContainer);
             overlay.appendChild(timelineDiv);
             document.body.appendChild(overlay);
 
-            // 关闭时释放
-            overlay.addEventListener('click', function(e) {
-                if (e.target === overlay) {
-                    URL.revokeObjectURL(video.src);
-                    overlay.remove();
-                }
-            });
-            closeBtn.addEventListener('click', function() {
-                URL.revokeObjectURL(video.src);
-            });
+            video.onloadedmetadata = () => {
+                video.play().catch(() => {});
+            };
 
-            showToast('👁️ 正在播放原片，请参考时间线对照剪辑方案');
+            showToast('👁️ 实时预览模式：字幕叠加 + TTS配音同步播放');
         }
 
         // ==================== 字幕预览 ====================

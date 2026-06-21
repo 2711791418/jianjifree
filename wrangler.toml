@@ -6,7 +6,7 @@ compatibility_date = "2025-01-01"
 # 本地开发用这个文件，生产环境在后台配（下一行注释掉也行）
 [vars]
 # DeepSeek: https://platform.deepseek.com（最便宜）
-DEEPSEEK_API_KEY = ""
+# DEEPSEEK_API_KEY = ""  # ← 不要填这里！用命令行上传
 
 # 通义千问: https://dashscope.aliyun.com
 # QIANWEN_API_KEY = ""
