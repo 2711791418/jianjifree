@@ -703,25 +703,23 @@
                         <div style="font-size:18px;font-weight:600;margin:10px 0;">AI 剪辑匹配完成！</div>
                         <div style="color:var(--text2);font-size:14px;">AI 已从全片中精选出精华片段，点击下方按钮渲染成品视频</div>
                         <div class="btn-group" style="margin-top:16px;justify-content:center;">
-                            <button class="btn btn-green" onclick="startCloudRender()" id="btnCloudRender" style="font-size:16px;padding:12px 32px;display:none;">☁️ 云端渲染导出（推荐）</button>
-                            <button class="btn btn-primary" onclick="startRender()" id="btnRender" style="font-size:16px;padding:12px 32px;">💻 本地渲染导出</button>
+                            <button class="btn btn-green" onclick="startCloudRender()" id="btnCloudRender" style="font-size:16px;padding:12px 32px;">☁️ 云端渲染导出</button>
                             <button class="btn btn-outline" onclick="previewVideo()">👁️ 实时预览</button>
                             <button class="btn btn-redo btn-sm" onclick="redoEdit()">🔄 重新剪辑</button>
                         </div>
-                        <div style="font-size:11px;color:var(--green);margin-top:8px;">☁️ <b>推荐云端渲染</b>：AI 逐段剪辑拼接 + 字幕烧录 + AI 配音 → MP4 | 💻 浏览器渲染：WebM</div>
+                        <div style="font-size:11px;color:var(--green);margin-top:8px;">☁️ 云端渲染：AI 逐段剪辑拼接 + 字幕烧录 + AI 配音 → MP4 成品</div>
                     </div>
                 </div>
 
                 <!-- 渲染进度 -->
                 <div class="card" id="renderCard" style="display:none;">
-                    <div class="card-title"><span class="dot" style="background:var(--green);"></span>🎬 正在渲染视频</div>
-                    <div style="color:var(--text2);font-size:13px;margin-bottom:10px;">使用 Canvas 逐帧烧录字幕 + 合成画面，浏览器本地处理</div>
+                    <div class="card-title"><span class="dot" style="background:var(--green);"></span>☁️ 云端渲染中</div>
+                    <div style="color:var(--text2);font-size:13px;margin-bottom:10px;">视频上传至后端 → ffmpeg 逐段剪辑拼接 → 字幕烧录 → AI 配音合成 → MP4</div>
                     <div class="progress-bar-wrap">
                         <div class="progress-bar-fill" id="renderProgressBar" style="background:linear-gradient(90deg, var(--green), #6fcf97);"></div>
                     </div>
                     <div class="progress-text" id="renderProgressText">准备渲染...</div>
                     <div id="renderTimeEstimate" style="font-size:11px;color:var(--text2);margin-top:4px;"></div>
-                    <button class="btn btn-redo btn-sm" onclick="cancelRender()" id="btnCancelRender" style="margin-top:10px;">⏹ 取消渲染</button>
                 </div>
             </div>
 
@@ -2496,8 +2494,6 @@
         function redoEdit() {
             APP_STATE.isEditing = false;
             APP_STATE.editCompleted = false;
-            renderState.active = false;
-            renderState.cancel = true;
             document.getElementById('progressCard').style.display = 'none';
             document.getElementById('completeBox').classList.remove('show');
             document.getElementById('renderCard').style.display = 'none';
@@ -2517,348 +2513,6 @@
         }
 
         // ==================== 下载与预览 ====================
-        // ==================== 视频渲染引擎 ====================
-        let renderState = { active: false, cancel: false };
-
-        async function startRender() {
-            if (!APP_STATE.uploadedFile) { showToast('请先上传视频', 'error'); return; }
-            const copywriting = APP_STATE.generatedCopy ||
-                document.getElementById('userCopywriting').value.trim();
-            if (!copywriting) { showToast('没有文案内容', 'error'); return; }
-
-            // 显示渲染卡片
-            document.getElementById('completeBox').classList.remove('show');
-            const renderCard = document.getElementById('renderCard');
-            renderCard.style.display = 'block';
-            renderCard.scrollIntoView({ behavior: 'smooth' });
-
-            renderState.active = true;
-            renderState.cancel = false;
-            document.getElementById('btnCancelRender').style.display = 'inline-block';
-
-            const video = document.createElement('video');
-            video.src = URL.createObjectURL(APP_STATE.uploadedFile);
-            video.preload = 'auto';
-            video.muted = true; // 先静音，后面单独处理音频
-
-            await new Promise((resolve, reject) => {
-                video.onloadedmetadata = resolve;
-                video.onerror = reject;
-            });
-
-            const duration = video.duration;
-            const fps = 24;
-            const totalFrames = Math.ceil(duration * fps);
-
-            // 准备字幕数据
-            const paragraphs = copywriting.split(/\n\n+/).filter(p => p.trim().length > 0);
-            // 将每个段落按句子拆分，均匀分配到时间段
-            const allSentences = [];
-            paragraphs.forEach(p => {
-                const sents = p.split(/[。！？\n]+/).filter(s => s.trim().length > 5);
-                sents.forEach(s => allSentences.push(s.trim()));
-            });
-            if (allSentences.length === 0) allSentences.push(copywriting);
-
-            // 从时间线获取匹配数据
-            let timelineMatches = [];
-            const timelineItems = document.getElementById('timelineItems');
-            if (timelineItems && timelineItems.children.length > 0) {
-                Array.from(timelineItems.children).forEach(item => {
-                    const match = item.textContent.match(/(\d+):(\d+)\s*~\s*(\d+):(\d+)/);
-                    if (match) {
-                        timelineMatches.push({
-                            start: parseInt(match[1]) * 60 + parseInt(match[2]),
-                            end: parseInt(match[3]) * 60 + parseInt(match[4]),
-                        });
-                    }
-                });
-            }
-
-            // 如果没有时间线，均匀分配
-            if (timelineMatches.length === 0) {
-                const segLen = duration / allSentences.length;
-                allSentences.forEach((_, i) => {
-                    timelineMatches.push({ start: i * segLen, end: (i + 1) * segLen });
-                });
-            }
-
-            // 每个时间段分配句子
-            const timedSubtitles = [];
-            timelineMatches.forEach((tm, i) => {
-                const sentsForSegment = [];
-                const startI = Math.floor(i * allSentences.length / timelineMatches.length);
-                const endI = Math.floor((i + 1) * allSentences.length / timelineMatches.length);
-                for (let j = startI; j < Math.min(endI, allSentences.length); j++) {
-                    sentsForSegment.push(allSentences[j]);
-                }
-                if (sentsForSegment.length > 0) {
-                    const subDuration = (tm.end - tm.start) / sentsForSegment.length;
-                    sentsForSegment.forEach((s, si) => {
-                        timedSubtitles.push({
-                            text: s,
-                            startTime: tm.start + si * subDuration,
-                            endTime: tm.start + (si + 1) * subDuration,
-                        });
-                    });
-                }
-            });
-
-            // 创建 Canvas
-            const canvas = document.createElement('canvas');
-            const maxW = 1280;
-            const scale = Math.min(1, maxW / video.videoWidth);
-            canvas.width = video.videoWidth * scale;
-            canvas.height = video.videoHeight * scale;
-            const ctx = canvas.getContext('2d');
-
-            // Canvas 视频流
-            const canvasStream = canvas.captureStream(fps);
-
-            // 获取视频音频
-            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const source = audioCtx.createMediaElementSource(video);
-            const dest = audioCtx.createMediaStreamDestination();
-            source.connect(dest);
-            source.connect(audioCtx.destination); // 同时播放以便听到
-            const audioTrack = dest.stream.getAudioTracks()[0];
-            if (audioTrack) canvasStream.addTrack(audioTrack);
-
-            // MediaRecorder
-            const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ?
-                'video/webm;codecs=vp9' : 'video/webm;codecs=vp8';
-            const chunks = [];
-            const recorder = new MediaRecorder(canvasStream, {
-                mimeType,
-                videoBitsPerSecond: 3000000,
-            });
-            recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-
-            const renderStartTime = Date.now();
-            const updateUI = () => {
-                if (!renderState.active) return;
-                // 用已处理片段数计算进度
-                const pct = timelineMatches.length > 1
-                    ? (currentClipIdx / timelineMatches.length) * 100
-                    : (video.currentTime / duration) * 100;
-                document.getElementById('renderProgressBar').style.width = Math.min(100, pct) + '%';
-                const elapsed = (Date.now() - renderStartTime) / 1000;
-                const remaining = timelineMatches.length > 1
-                    ? (elapsed / Math.max(currentClipIdx, 1)) * (timelineMatches.length - currentClipIdx)
-                    : (duration - video.currentTime) * (elapsed / Math.max(video.currentTime, 0.1));
-                document.getElementById('renderProgressText').textContent =
-                    timelineMatches.length > 1
-                        ? `🎬 渲染片段 ${Math.min(currentClipIdx + 1, timelineMatches.length)}/${timelineMatches.length}`
-                        : `正在渲染... ${formatTime(video.currentTime)} / ${formatTime(duration)}`;
-                document.getElementById('renderTimeEstimate').textContent =
-                    '预计剩余 ' + formatTime(Math.max(0, remaining));
-            };
-
-            const uiTimer = setInterval(updateUI, 500);
-
-            // 逐帧绘制
-            function drawFrame() {
-                if (!renderState.active || renderState.cancel) return;
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-                // 找当前时间对应的字幕
-                const t = video.currentTime;
-                const subs = timedSubtitles.filter(s => t >= s.startTime && t <= s.endTime);
-                if (subs.length > 0) {
-                    const text = subs.map(s => s.text).join(' ');
-                    drawSubtitle(ctx, text, canvas.width, canvas.height);
-                }
-
-                if (!video.ended && !video.paused) {
-                    requestAnimationFrame(drawFrame);
-                }
-            }
-
-            function drawSubtitle(ctx, text, w, h) {
-                const fontSize = APP_STATE.currentSubtitleSize * 2; // Canvas 需要更大字号
-                const fontFamily = APP_STATE.currentSubtitleFont.split(',')[0].replace(/['"]/g, '');
-                ctx.save();
-                ctx.font = `bold ${fontSize}px ${fontFamily}, "PingFang SC", "Microsoft YaHei", sans-serif`;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'bottom';
-
-                const maxWidth = w * 0.85;
-                const lines = wrapText(ctx, text, maxWidth);
-                const lineHeight = fontSize * 1.5;
-                const totalHeight = lines.length * lineHeight;
-                const y = h - h * 0.08;
-
-                // 背景
-                if (APP_STATE.currentSubtitleBg !== 'none') {
-                    ctx.fillStyle = APP_STATE.currentSubtitleBg;
-                    const bgW = maxWidth + 40;
-                    const bgH = totalHeight + 20;
-                    const bgX = w / 2 - bgW / 2;
-                    const bgY = y - totalHeight - 5;
-                    ctx.fillRect(bgX, bgY, bgW, bgH);
-                }
-
-                // 描边
-                if (APP_STATE.currentSubtitleStroke !== 'none') {
-                    const strokeInfo = APP_STATE.currentSubtitleStroke.split(' ');
-                    ctx.strokeStyle = strokeInfo[1] || '#000';
-                    ctx.lineWidth = parseInt(strokeInfo[0]) * 3 || 6;
-                    lines.forEach((line, i) => {
-                        const lineY = y - (lines.length - 1 - i) * lineHeight;
-                        ctx.strokeText(line, w / 2, lineY);
-                    });
-                }
-
-                // 文字
-                ctx.fillStyle = APP_STATE.currentSubtitleColor;
-                lines.forEach((line, i) => {
-                    const lineY = y - (lines.length - 1 - i) * lineHeight;
-                    ctx.fillText(line, w / 2, lineY);
-                });
-
-                ctx.restore();
-            }
-
-            function wrapText(ctx, text, maxWidth) {
-                const lines = [];
-                let current = '';
-                for (let i = 0; i < text.length; i++) {
-                    const test = current + text[i];
-                    if (ctx.measureText(test).width > maxWidth && current.length > 0) {
-                        lines.push(current);
-                        current = text[i];
-                    } else {
-                        current = test;
-                    }
-                }
-                if (current) lines.push(current);
-                return lines.length > 0 ? lines : [text];
-            }
-
-            // ======== 逐段渲染（Clip-by-Clip） ========
-            // 使用时间线数据逐段 seek + play + record，而非整片从头播放
-            document.getElementById('renderProgressText').textContent = '正在初始化渲染...';
-            video.muted = false; // 恢复音频以捕获
-
-            let currentClipIdx = 0;
-            let allClipsProcessed = false;
-
-            function renderNextClip() {
-                if (!renderState.active || renderState.cancel || allClipsProcessed) return;
-
-                if (currentClipIdx >= timelineMatches.length) {
-                    // 所有片段处理完毕
-                    allClipsProcessed = true;
-                    clearInterval(uiTimer);
-                    recorder.stop();
-                    renderState.active = false;
-                    document.getElementById('btnCancelRender').style.display = 'none';
-                    document.getElementById('renderProgressBar').style.width = '100%';
-                    document.getElementById('renderProgressText').textContent = '正在封装视频文件...';
-                    document.getElementById('renderTimeEstimate').textContent =
-                        `共渲染 ${timelineMatches.length} 个片段，总计约 ${formatTime(timelineMatches.reduce((s, c) => s + (c.end - c.start), 0))}`;
-                    return;
-                }
-
-                const clip = timelineMatches[currentClipIdx];
-                video.currentTime = clip.start;
-                document.getElementById('renderProgressText').textContent =
-                    `🎬 渲染片段 ${currentClipIdx + 1}/${timelineMatches.length}：${formatTime(clip.start)} ~ ${formatTime(clip.end)}`;
-
-                const onSeeked = () => {
-                    video.removeEventListener('seeked', onSeeked);
-                    video.play().catch(() => {});
-                };
-
-                const onTimeUpdate = () => {
-                    if (!renderState.active || renderState.cancel) {
-                        video.removeEventListener('timeupdate', onTimeUpdate);
-                        return;
-                    }
-                    if (video.currentTime >= clip.end) {
-                        video.pause();
-                        video.removeEventListener('timeupdate', onTimeUpdate);
-                        currentClipIdx++;
-                        // 短暂延迟后处理下一段
-                        setTimeout(() => renderNextClip(), 50);
-                    }
-                };
-
-                video.addEventListener('seeked', onSeeked);
-                video.addEventListener('timeupdate', onTimeUpdate);
-            }
-
-            // 启动渲染循环
-            recorder.start();
-
-            video.onplay = () => {
-                document.getElementById('renderProgressText').textContent = '正在渲染...';
-                requestAnimationFrame(drawFrame);
-            };
-
-            // 如果有时间线数据（多段剪辑），使用逐段渲染；否则从头播放
-            if (timelineMatches.length > 1 || (timelineMatches.length === 1 && timelineMatches[0].end - timelineMatches[0].start < duration * 0.9)) {
-                // 多段剪辑 → 逐段渲染
-                renderNextClip();
-            } else {
-                // 没有时间线数据，播放全片
-                video.currentTime = 0;
-                video.play().catch(() => {});
-                video.onended = () => {
-                    clearInterval(uiTimer);
-                    recorder.stop();
-                    renderState.active = false;
-                    document.getElementById('btnCancelRender').style.display = 'none';
-                    document.getElementById('renderProgressBar').style.width = '100%';
-                    document.getElementById('renderProgressText').textContent = '正在封装视频文件...';
-                    document.getElementById('renderTimeEstimate').textContent = '';
-                };
-            }
-
-            // 兼容 ended 事件（全片模式的后备）
-            video.addEventListener('ended', () => {
-                if (allClipsProcessed) return; // 逐段模式已经处理过了
-                clearInterval(uiTimer);
-                recorder.stop();
-                renderState.active = false;
-                document.getElementById('btnCancelRender').style.display = 'none';
-                document.getElementById('renderProgressBar').style.width = '100%';
-                document.getElementById('renderProgressText').textContent = '正在封装视频文件...';
-                document.getElementById('renderTimeEstimate').textContent = '';
-            });
-
-            recorder.onstop = () => {
-                const blob = new Blob(chunks, { type: mimeType });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                const outName = (APP_STATE.uploadedFile.name.replace(/\.[^.]+$/, '') || 'output') + '_解说版.webm';
-                a.download = outName;
-                a.click();
-                URL.revokeObjectURL(url);
-                URL.revokeObjectURL(video.src);
-                audioCtx.close();
-
-                document.getElementById('renderProgressText').textContent = '✅ 渲染完成！视频已自动下载';
-                document.getElementById('btnCancelRender').style.display = 'none';
-                showToast('✅ 视频渲染完成！字幕已烧录到视频中', 'success');
-            };
-
-            video.onerror = () => {
-                clearInterval(uiTimer);
-                renderState.active = false;
-                document.getElementById('renderProgressText').textContent = '❌ 渲染失败';
-                showToast('渲染出错，请重试', 'error');
-            };
-        }
-
-        function cancelRender() {
-            renderState.cancel = true;
-            renderState.active = false;
-            document.getElementById('renderProgressText').textContent = '⏹ 已取消';
-            document.getElementById('btnCancelRender').style.display = 'none';
-            showToast('渲染已取消');
-        }
 
         // ==================== 后端配置 ====================
         function getBackendUrl() {
@@ -2961,7 +2615,6 @@
             const totalClipSec = timelineData.reduce((s, t) => s + (t.endTime - t.startTime), 0);
             document.getElementById('renderProgressText').textContent =
                 `📤 正在上传视频（${timelineData.length} 个片段，总长约 ${formatTime(totalClipSec)}）到云端...`;
-            document.getElementById('btnCancelRender').style.display = 'none';
 
             const formData = new FormData();
             formData.append('video', APP_STATE.uploadedFile);
