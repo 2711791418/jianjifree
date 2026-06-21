@@ -16,7 +16,6 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const { EdgeTTS } = require('edge-tts');
 
 const app = express();
 app.use(cors());
@@ -33,21 +32,47 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', backend: true, time: new Date().toISOString() });
 });
 
-// ==================== TTS 配音生成 ====================
+// ==================== TTS 配音生成（微软 Edge TTS，免费） ====================
+async function edgeTTS(text, outputFile, voice = 'zh-CN-XiaoxiaoNeural') {
+  const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="zh-CN">
+  <voice name="${voice}">${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</voice>
+</speak>`;
+
+  return new Promise((resolve, reject) => {
+    const https = require('https');
+    const url = 'https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=6A5AA1D4EAFF4E9FB37E23D68491D6F4';
+
+    const req = https.request(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/ssml+xml',
+        'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      },
+    }, (res) => {
+      if (res.statusCode !== 200) {
+        reject(new Error(`TTS HTTP ${res.statusCode}`));
+        return;
+      }
+      const file = fs.createWriteStream(outputFile);
+      res.pipe(file);
+      file.on('finish', resolve);
+      file.on('error', reject);
+    });
+
+    req.on('error', reject);
+    req.write(ssml);
+    req.end();
+  });
+}
+
 app.post('/api/tts', async (req, res) => {
   try {
-    const { text, voice, rate, pitch } = req.body;
+    const { text, voice } = req.body;
     if (!text) return res.status(400).json({ error: '缺少 text' });
 
     const outputFile = `/tmp/tts_${uuidv4()}.mp3`;
-    const tts = new EdgeTTS({
-      text: text,
-      voice: voice || 'zh-CN-XiaoxiaoNeural',  // 默认中文女声
-      rate: rate || '+0%',
-      pitch: pitch || '+0Hz',
-    });
-
-    await tts.save(outputFile);
+    await edgeTTS(text, outputFile, voice || 'zh-CN-XiaoxiaoNeural');
     res.sendFile(outputFile, () => {
       fs.unlink(outputFile, () => {});
     });
@@ -123,13 +148,7 @@ app.post('/api/render', upload.single('video'), async (req, res) => {
     try {
       const fullText = timelineData.map(s => s.text || '').join('。');
       if (fullText.trim().length > 0) {
-        const tts = new EdgeTTS({
-          text: fullText.substring(0, 5000), // 限制长度
-          voice: ttsVoice || 'zh-CN-XiaoxiaoNeural',
-          rate: '+5%',
-          pitch: '+0Hz',
-        });
-        await tts.save(ttsFile);
+        await edgeTTS(fullText.substring(0, 5000), ttsFile, ttsVoice || 'zh-CN-XiaoxiaoNeural');
         hasTTS = true;
         console.log(`[${jobId}] TTS 配音完成`);
       }
