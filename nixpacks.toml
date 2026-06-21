@@ -1,6 +1,0 @@
-# Railway 部署配置 — 自动安装 ffmpeg
-[phases.setup]
-aptPackages = ["ffmpeg"]
-
-[start]
-cmd = "node server.js"
