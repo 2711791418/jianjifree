@@ -2607,14 +2607,21 @@
                 subtitleStroke: APP_STATE.currentSubtitleStroke,
             };
 
-            // 显示进度
+            // 显示进度卡片
             document.getElementById('completeBox').classList.remove('show');
             const renderCard = document.getElementById('renderCard');
             renderCard.style.display = 'block';
             renderCard.scrollIntoView({ behavior: 'smooth' });
+
             const totalClipSec = timelineData.reduce((s, t) => s + (t.endTime - t.startTime), 0);
-            document.getElementById('renderProgressText').textContent =
-                `📤 正在上传视频（${timelineData.length} 个片段，总长约 ${formatTime(totalClipSec)}）到云端...`;
+            const totalClipMin = Math.round(totalClipSec / 60);
+            const progressBar = document.getElementById('renderProgressBar');
+            const progressText = document.getElementById('renderProgressText');
+            const timeEstimate = document.getElementById('renderTimeEstimate');
+
+            progressBar.style.width = '0%';
+            progressText.textContent = `📤 正在上传视频（${timelineData.length} 个片段，总长约 ${totalClipMin} 分钟）到云端...`;
+            timeEstimate.textContent = '';
 
             const formData = new FormData();
             formData.append('video', APP_STATE.uploadedFile);
@@ -2623,6 +2630,49 @@
             formData.append('subtitleStyle', JSON.stringify(subtitleStyle));
             formData.append('ttsVoice', 'zh-CN-XiaoxiaoNeural');
 
+            // 处理阶段模拟
+            const processingStages = [
+                { pct: 5,  text: '📤 上传视频中...' },
+                { pct: 15, text: '✂️ 正在切割视频片段...' },
+                { pct: 30, text: '📝 生成字幕文件...' },
+                { pct: 45, text: '🔊 合成 AI 配音...' },
+                { pct: 65, text: '🎬 拼接片段 + 烧录字幕...' },
+                { pct: 80, text: '🔀 混合音频轨道...' },
+                { pct: 95, text: '📦 封装 MP4 输出...' },
+            ];
+
+            let stageIdx = 0;
+            let processingTimer = null;
+
+            function startProcessingSimulation() {
+                const startTime = Date.now();
+                // 估算总处理时间：每分钟成片约需 10-20 秒处理，最少 30 秒，最多 5 分钟
+                const estTotalSec = Math.max(30, Math.min(300, totalClipSec * 0.3));
+                timeEstimate.textContent = `预计处理时间：约 ${Math.round(estTotalSec / 60)} 分钟`;
+
+                processingTimer = setInterval(() => {
+                    const elapsed = (Date.now() - startTime) / 1000;
+                    const simPct = Math.min(95, (elapsed / estTotalSec) * 100);
+
+                    // 更新阶段文字
+                    while (stageIdx < processingStages.length - 1 && simPct >= processingStages[stageIdx + 1].pct) {
+                        stageIdx++;
+                    }
+                    const stage = processingStages[stageIdx];
+
+                    progressBar.style.width = simPct + '%';
+                    progressText.textContent = stage.text;
+                    timeEstimate.textContent = `预计剩余 ${Math.round(Math.max(0, estTotalSec - elapsed))} 秒`;
+                }, 500);
+            }
+
+            function stopProcessingSimulation() {
+                if (processingTimer) {
+                    clearInterval(processingTimer);
+                    processingTimer = null;
+                }
+            }
+
             try {
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', backendUrl + '/api/render');
@@ -2630,12 +2680,23 @@
                 xhr.upload.onprogress = (e) => {
                     if (e.lengthComputable) {
                         const pct = Math.round(e.loaded / e.total * 100);
-                        document.getElementById('renderProgressText').textContent = `上传中... ${pct}%`;
+                        progressBar.style.width = pct + '%';
+                        progressText.textContent = `📤 上传中 ${pct}%（${timelineData.length} 个片段，成片约 ${totalClipMin} 分钟）`;
+                        timeEstimate.textContent = '';
                     }
                 };
 
+                xhr.onloadstart = () => {
+                    progressBar.style.width = '0%';
+                };
+
                 xhr.onload = function() {
+                    stopProcessingSimulation();
                     if (xhr.status === 200) {
+                        progressBar.style.width = '100%';
+                        progressText.textContent = '✅ 云端渲染完成！正在下载 MP4...';
+                        timeEstimate.textContent = '';
+
                         const blob = new Blob([xhr.response], { type: 'video/mp4' });
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement('a');
@@ -2643,34 +2704,40 @@
                         a.download = (APP_STATE.uploadedFile.name.replace(/\.[^.]+$/, '') || 'output') + '_解说版.mp4';
                         a.click();
                         URL.revokeObjectURL(url);
-                        document.getElementById('renderProgressBar').style.width = '100%';
-                        document.getElementById('renderProgressText').textContent = '✅ 云端渲染完成！视频已下载（MP4格式，含剪辑+字幕+配音）';
+
+                        progressText.textContent = '✅ 云端渲染完成！视频已下载（MP4格式，含剪辑+字幕+配音）';
                         showToast('✅ 云端渲染完成！', 'success');
                     } else {
+                        progressBar.style.width = '0%';
+                        progressBar.style.background = 'var(--red)';
                         const err = JSON.parse(xhr.responseText || '{}');
-                        document.getElementById('renderProgressText').textContent = '❌ 渲染失败：' + (err.error || xhr.statusText);
+                        progressText.textContent = '❌ 渲染失败：' + (err.error || xhr.statusText);
+                        timeEstimate.textContent = '';
                         showToast('云端渲染失败', 'error');
                     }
                 };
 
                 xhr.onerror = function() {
-                    document.getElementById('renderProgressText').textContent = '❌ 无法连接后端，请确认服务器在线';
+                    stopProcessingSimulation();
+                    progressBar.style.width = '0%';
+                    progressBar.style.background = 'var(--red)';
+                    progressText.textContent = '❌ 无法连接后端，请确认服务器在线';
+                    timeEstimate.textContent = '';
                     showToast('无法连接后端', 'error');
                 };
 
-                xhr.onloadend = function() {
-                    // 模拟进度
-                    setTimeout(() => {
-                        if (xhr.readyState === 4 && xhr.status === 200) return;
-                        document.getElementById('renderProgressText').textContent = '⏳ 云端正在处理（剪辑+配音+字幕），请稍候...';
-                        document.getElementById('renderTimeEstimate').textContent = '预计1-5分钟';
-                    }, 2000);
+                // 上传完成后启动处理阶段模拟
+                xhr.upload.onloadend = () => {
+                    progressBar.style.width = '5%';
+                    progressText.textContent = '✅ 上传完成，云端开始处理...';
+                    startProcessingSimulation();
                 };
 
                 xhr.responseType = 'arraybuffer';
                 xhr.send(formData);
             } catch (e) {
-                document.getElementById('renderProgressText').textContent = '❌ 错误：' + e.message;
+                stopProcessingSimulation();
+                progressText.textContent = '❌ 错误：' + e.message;
             }
         }
 
