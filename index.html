@@ -1549,7 +1549,11 @@
                 if (!resp.ok) {
                     const errData = await resp.json().catch(() => ({}));
                     if (errData.hint) {
-                        logDiv.innerHTML += `<div style="color:var(--gold);">💡 ${errData.hint}</div>`;
+                        logDiv.innerHTML += `<div style="color:var(--gold);background:rgba(240,192,96,0.1);padding:8px 12px;border-radius:6px;margin:6px 0;line-height:1.7;font-size:12px;">💡 <b>解决方案：</b>${errData.hint}</div>`;
+                    }
+                    // 未配置Key → 明确告诉用户会降级
+                    if (errData.error && errData.error.includes('未配置')) {
+                        logDiv.innerHTML += `<div style="color:var(--gold);">⚠️ 视觉AI不可用，将自动降级为<b>关键词匹配模式</b>（仍可正常剪辑出片）</div>`;
                     }
                     throw new Error(errData.error || 'Worker 返回错误 ' + resp.status);
                 }

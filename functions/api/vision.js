@@ -15,7 +15,12 @@ export async function onRequestPost({ request, env }) {
     const modelName = model || getDefaultVisionModel(provider);
 
     if (!apiKey) {
-      return Response.json({ success: false, error: '未配置视觉 AI Key' }, { status: 500 });
+      const keyName = provider.toUpperCase() + '_API_KEY';
+      return Response.json({
+        success: false,
+        error: `未配置 ${provider} 的视觉 API Key（查找环境变量：${keyName}）`,
+        hint: `获取免费 Key：dashscope.aliyun.com → 开通模型服务 → 复制 Key → Cloudflare Pages → Settings → Variables and secrets → 添加 ${keyName} → 重新部署`,
+      }, { status: 500 });
     }
 
     // 检查模型是否支持视觉识别（多模态）
