@@ -592,6 +592,17 @@
                     <div id="modeAContent" style="margin-top:16px;">
                         <textarea class="copywriting-area" id="userCopywriting" placeholder="在此输入你的电影解说文案...&#10;&#10;例如：这部电影讲述了一个关于勇气与牺牲的故事。主角在命运的十字路口做出了改变一生的选择..."></textarea>
                         <div class="char-count"><span id="charCount">0</span> 字</div>
+                        <div class="admin-row" style="margin-top:12px;">
+                            <label style="font-size:13px;white-space:nowrap;">🎯 成片时长：</label>
+                            <select id="targetDurationA" style="padding:6px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;font-family:inherit;">
+                                <option value="600">10 分钟</option>
+                                <option value="900" selected>15 分钟（推荐）</option>
+                                <option value="1200">20 分钟</option>
+                                <option value="1800">30 分钟</option>
+                                <option value="3600">60 分钟</option>
+                            </select>
+                            <span style="font-size:11px;color:var(--green);">AI 将从全片精选匹配片段，而非整部电影</span>
+                        </div>
                         <div class="btn-group" style="margin-top:14px;">
                             <button class="btn btn-primary" id="btnModeA" onclick="startEditModeA()" disabled>🎬 开始 AI 剪辑</button>
                         </div>
@@ -616,6 +627,17 @@
                                 <input type="number" id="targetWordCount" value="800" min="200" max="10000" step="100" style="width:110px;text-align:center;" oninput="this.value=Math.max(200,Math.min(10000,parseInt(this.value)||200))">
                                 <span style="font-size:12px;color:var(--text2);">字（200 ~ 10000）</span>
                                 <span style="font-size:12px;color:var(--text2);margin-left:4px;">💡 数值越大生成越久</span>
+                            </div>
+                            <div class="admin-row" style="margin-bottom:12px;">
+                                <label style="font-size:13px;white-space:nowrap;">🎯 成片时长：</label>
+                                <select id="targetDurationB" style="padding:6px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;font-family:inherit;">
+                                    <option value="600">10 分钟</option>
+                                    <option value="900" selected>15 分钟（推荐）</option>
+                                    <option value="1200">20 分钟</option>
+                                    <option value="1800">30 分钟</option>
+                                    <option value="3600">60 分钟</option>
+                                </select>
+                                <span style="font-size:11px;color:var(--green);">AI 将从全片精选匹配片段，而非整部电影</span>
                             </div>
                             <div style="margin-bottom:12px;">
                                 <div style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;" onclick="toggleStylePanel()">
@@ -679,14 +701,14 @@
                     <div style="text-align:center;padding:20px;">
                         <div style="font-size:48px;">🎉</div>
                         <div style="font-size:18px;font-weight:600;margin:10px 0;">AI 剪辑匹配完成！</div>
-                        <div style="color:var(--text2);font-size:14px;">文案已匹配到视频时间线，点击下方按钮渲染成品视频</div>
+                        <div style="color:var(--text2);font-size:14px;">AI 已从全片中精选出精华片段，点击下方按钮渲染成品视频</div>
                         <div class="btn-group" style="margin-top:16px;justify-content:center;">
+                            <button class="btn btn-green" onclick="startCloudRender()" id="btnCloudRender" style="font-size:16px;padding:12px 32px;display:none;">☁️ 云端渲染导出（推荐）</button>
                             <button class="btn btn-primary" onclick="startRender()" id="btnRender" style="font-size:16px;padding:12px 32px;">💻 本地渲染导出</button>
-                            <button class="btn btn-green" onclick="startCloudRender()" id="btnCloudRender" style="font-size:16px;padding:12px 32px;display:none;">☁️ 云端渲染导出</button>
                             <button class="btn btn-outline" onclick="previewVideo()">👁️ 实时预览</button>
                             <button class="btn btn-redo btn-sm" onclick="redoEdit()">🔄 重新剪辑</button>
                         </div>
-                        <div style="font-size:11px;color:var(--text2);margin-top:8px;">💻 浏览器渲染：字幕烧录+WebM | ☁️ 云端渲染：剪辑+字幕+配音+MP4</div>
+                        <div style="font-size:11px;color:var(--green);margin-top:8px;">☁️ <b>推荐云端渲染</b>：AI 逐段剪辑拼接 + 字幕烧录 + AI 配音 → MP4 | 💻 浏览器渲染：WebM</div>
                     </div>
                 </div>
 
@@ -904,8 +926,7 @@
                 <div class="admin-row">
                     <label style="font-size:13px;white-space:nowrap;">视觉引擎：</label>
                     <select id="visionProviderSelect" onchange="onVisionProviderChange()" style="padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;font-family:inherit;flex:1;min-width:150px;">
-                        <option value="qianwen">通义千问 VL（阿里）</option>
-                        <option value="deepseek">DeepSeek VL（深度求索）</option>
+                        <option value="qianwen">通义千问 VL（阿里·推荐）</option>
                         <option value="doubao">豆包 Vision（字节）</option>
                         <option value="openai">GPT-4o（OpenAI）</option>
                         <option value="custom">自定义接口</option>
@@ -1259,11 +1280,21 @@
         }
 
         // ==================== 模式A：直接剪辑 ====================
+        function getTargetDuration() {
+            // Read from whichever mode is visible
+            const selA = document.getElementById('targetDurationA');
+            const selB = document.getElementById('targetDurationB');
+            const mode = APP_STATE.currentMode;
+            const sel = mode === 'A' ? selA : selB;
+            return parseInt(sel?.value) || 900; // default 15 min
+        }
+
         function startEditModeA() {
             if (!APP_STATE.uploadedFile) { showToast('请先上传电影文件', 'error'); return; }
             const copywriting = document.getElementById('userCopywriting').value.trim();
             if (copywriting.length < 10) { showToast('文案太短，请至少输入10个字', 'error'); return; }
-            startEditing(copywriting);
+            const targetDuration = getTargetDuration();
+            startEditing(copywriting, targetDuration);
         }
 
         // ==================== 模式B：AI生成文案 ====================
@@ -1373,12 +1404,12 @@
 
         // ==================== 视觉 AI 配置 ====================
         const VISION_PROVIDERS = {
-            qianwen:  { name: '通义千问 VL', model: 'qwen-vl-plus' },
-            deepseek: { name: 'DeepSeek VL',  model: 'deepseek-chat' },
+            qianwen:  { name: '通义千问 VL（推荐，免费额度）', model: 'qwen-vl-plus' },
             doubao:   { name: '豆包 Vision',  model: 'doubao-vision-pro' },
             openai:   { name: 'GPT-4o',       model: 'gpt-4o' },
             custom:   { name: '自定义',       model: '' },
         };
+        // DeepSeek 的 deepseek-chat 是纯文本模型，不支持图片识别，不列入视觉引擎
 
         function getVisionConfig() {
             return loadData('visionConfig', { provider: 'qianwen', model: 'qwen-vl-plus', frameInterval: 8 });
@@ -1516,7 +1547,11 @@
                 });
 
                 if (!resp.ok) {
-                    throw new Error('Worker 返回错误 ' + resp.status);
+                    const errData = await resp.json().catch(() => ({}));
+                    if (errData.hint) {
+                        logDiv.innerHTML += `<div style="color:var(--gold);">💡 ${errData.hint}</div>`;
+                    }
+                    throw new Error(errData.error || 'Worker 返回错误 ' + resp.status);
                 }
 
                 const data = await resp.json();
@@ -1540,19 +1575,40 @@
             }
         }
 
-        // ==================== 关键词降级匹配（无视觉AI时） ====================
-        function keywordBasedMatching(copyParagraphs, totalDuration, frameCount) {
+        // ==================== 智能剪辑算法（无视觉AI时） ====================
+        // 从整部电影中精选与文案匹配的短片段，总时长控制在 targetDuration
+        function keywordBasedMatching(copyParagraphs, totalDuration, targetDuration, frameCount) {
             const matches = [];
-            const segmentDuration = totalDuration / Math.max(copyParagraphs.length, 1);
+            const numParagraphs = copyParagraphs.length;
+            // 每段时长 = 目标总时长 / 段落数，限制在 15~50 秒
+            const clipDuration = Math.max(15, Math.min(50, targetDuration / numParagraphs));
+            const searchStep = Math.max(3, Math.floor(clipDuration / 4)); // 搜索步长
+
+            const usedRanges = []; // 已占用的时间段，避免重叠
 
             copyParagraphs.forEach((para, i) => {
-                // 提取段落关键词
                 const keywords = extractKeywords(para);
-                // 按时间均匀分布 + 关键词微调
-                const baseTime = i * segmentDuration;
-                const jitter = (Math.random() - 0.5) * segmentDuration * 0.4;
-                const startTime = Math.max(0, baseTime + jitter);
-                const endTime = Math.min(totalDuration, startTime + segmentDuration);
+
+                // 理想位置：按时间轴均匀分布的起始点
+                const idealStart = (i / numParagraphs) * totalDuration;
+                let bestTime = idealStart;
+                let bestScore = -Infinity;
+
+                // 在全片范围内搜索最佳窗口
+                for (let t = 0; t < totalDuration - clipDuration; t += searchStep) {
+                    // 跳过与已选片段重叠超过30%的位置
+                    if (isRangeOverlapping(t, t + clipDuration, usedRanges, 0.3)) continue;
+
+                    const score = scoreClipPosition(t, clipDuration, i, numParagraphs, totalDuration, keywords);
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestTime = t;
+                    }
+                }
+
+                const startTime = bestTime;
+                const endTime = Math.min(totalDuration, startTime + clipDuration);
+                usedRanges.push({ start: startTime, end: endTime });
 
                 matches.push({
                     paragraphIndex: i,
@@ -1560,12 +1616,53 @@
                     startTime,
                     endTime,
                     keywords,
-                    frameDesc: `场景 #${Math.floor(i * frameCount / copyParagraphs.length) + 1}`,
+                    frameDesc: `场景 #${Math.floor(i * frameCount / numParagraphs) + 1}`,
                     method: 'keyword',
                 });
             });
 
+            // 按时间顺序排列，确保观看流畅
+            matches.sort((a, b) => a.startTime - b.startTime);
+
+            const totalClipTime = matches.reduce((sum, m) => sum + (m.endTime - m.startTime), 0);
+            console.log(`🎬 智能剪辑：${numParagraphs} 段 × 约${Math.round(clipDuration)}秒 = 约${Math.round(totalClipTime / 60)}分钟（目标${Math.round(targetDuration / 60)}分钟）`);
+
             return matches;
+        }
+
+        // 评分函数：评估某个时间段作为剪辑位置的适合度
+        function scoreClipPosition(startTime, clipDuration, paraIndex, totalParas, totalDuration, keywords) {
+            let score = 0;
+
+            // 1. 位置多样性奖励：鼓励覆盖电影的开头/中段/结尾
+            const idealPos = paraIndex / totalParas; // 0~1，该段落在全片中的理想位置比例
+            const actualPos = (startTime + clipDuration / 2) / totalDuration;
+            const posDiff = Math.abs(idealPos - actualPos);
+            score += (1 - posDiff) * 30; // 位置越接近理想，分越高
+
+            // 2. 避免极端位置（片头片尾字幕通常不适合）
+            const marginRatio = 0.03; // 前3%和后3%是片头片尾
+            if (startTime < totalDuration * marginRatio) score -= 20;
+            if (startTime > totalDuration * (1 - marginRatio)) score -= 15;
+
+            // 3. 轻微随机性，避免完全相同的结果
+            score += (Math.sin(startTime * 0.1 + paraIndex) * 0.5 + 0.5) * 10;
+
+            return score;
+        }
+
+        // 检查时间段是否与已占用范围重叠
+        function isRangeOverlapping(start, end, usedRanges, maxOverlapRatio) {
+            for (const r of usedRanges) {
+                const overlapStart = Math.max(start, r.start);
+                const overlapEnd = Math.min(end, r.end);
+                if (overlapStart < overlapEnd) {
+                    const overlap = overlapEnd - overlapStart;
+                    const duration = end - start;
+                    if (overlap / duration > maxOverlapRatio) return true;
+                }
+            }
+            return false;
         }
 
         function extractKeywords(text) {
@@ -1578,36 +1675,64 @@
         }
 
         // ==================== 智能匹配：画面描述 ↔ 文案段落 ====================
-        function matchCopyToScenes(copyParagraphs, frameDescriptions, totalDuration) {
+        function matchCopyToScenes(copyParagraphs, frameDescriptions, totalDuration, targetDuration) {
             const matches = [];
-            let frameIdx = 0;
+            const numParagraphs = copyParagraphs.length;
+            // 每段时长 = 目标总时长 / 段落数，15~50秒
+            const clipDuration = Math.max(15, Math.min(50, targetDuration / numParagraphs));
+            const searchStep = Math.max(3, Math.floor(clipDuration / 4));
+
+            const usedRanges = [];
+
+            // 预先对有效画面描述建立索引，加速搜索
+            const validFrames = frameDescriptions.filter(f =>
+                f && f.description &&
+                !f.description.includes('[画面提取失败]') &&
+                !f.description.includes('[AI 分析失败]') &&
+                !f.description.includes('[AI错误]') &&
+                !f.description.includes('[请求失败]')
+            );
+
+            let usedFrameIdx = 0;
 
             copyParagraphs.forEach((para, paraIdx) => {
                 const paraKeywords = extractKeywords(para);
+                let bestTime = (paraIdx / numParagraphs) * totalDuration;
+                let bestScore = -Infinity;
+                let bestFrameDesc = '无画面信息';
+                let bestMethod = 'keyword';
 
-                // 寻找最匹配的画面
-                let bestFrame = frameDescriptions[Math.min(frameIdx, frameDescriptions.length - 1)];
-                let bestScore = -1;
+                // 在有效画面描述中搜索最佳匹配
+                for (let fi = 0; fi < validFrames.length; fi++) {
+                    const fd = validFrames[fi];
+                    const clipStart = Math.max(0, fd.time - clipDuration * 0.4);
+                    const clipEnd = Math.min(totalDuration, clipStart + clipDuration);
 
-                // 在当前窗口附近搜索最佳匹配
-                const searchStart = Math.max(0, frameIdx - 1);
-                const searchEnd = Math.min(frameDescriptions.length, frameIdx + 3);
+                    // 跳过重叠过多的位置
+                    if (isRangeOverlapping(clipStart, clipEnd, usedRanges, 0.3)) continue;
 
-                for (let f = searchStart; f < searchEnd; f++) {
-                    const fd = frameDescriptions[f];
-                    if (!fd || !fd.description || fd.description === '[画面提取失败]' || fd.description === '[AI 分析失败]') continue;
-                    const score = keywordOverlapScore(paraKeywords, fd.description);
-                    if (score > bestScore) {
-                        bestScore = score;
-                        bestFrame = fd;
-                        frameIdx = f;
+                    // AI视觉评分：关键词 vs 画面描述
+                    const visionScore = keywordOverlapScore(paraKeywords, fd.description);
+
+                    // 位置评分
+                    const idealPos = paraIdx / numParagraphs;
+                    const actualPos = (clipStart + clipDuration / 2) / totalDuration;
+                    const posScore = (1 - Math.abs(idealPos - actualPos)) * 15;
+
+                    const totalScore = visionScore * 3 + posScore;
+
+                    if (totalScore > bestScore) {
+                        bestScore = totalScore;
+                        bestTime = clipStart;
+                        bestFrameDesc = fd.description;
+                        bestMethod = visionScore > 0 ? 'ai_vision' : 'keyword';
+                        usedFrameIdx = fi;
                     }
                 }
 
-                // 计算起止时间
-                const startTime = bestFrame ? bestFrame.time : (paraIdx / copyParagraphs.length) * totalDuration;
-                const nextFrame = frameDescriptions[Math.min(frameIdx + 1, frameDescriptions.length - 1)];
-                const endTime = nextFrame ? nextFrame.time : Math.min(totalDuration, startTime + (totalDuration / copyParagraphs.length));
+                const startTime = bestTime;
+                const endTime = Math.min(totalDuration, bestTime + clipDuration);
+                usedRanges.push({ start: startTime, end: endTime });
 
                 matches.push({
                     paragraphIndex: paraIdx,
@@ -1615,15 +1740,19 @@
                     startTime,
                     endTime,
                     keywords: paraKeywords,
-                    frameDesc: bestFrame?.description || '无画面信息',
-                    frameTime: bestFrame?.time || startTime,
-                    method: bestScore > 0 ? 'ai_vision' : 'fallback',
+                    frameDesc: bestFrameDesc,
+                    frameTime: startTime,
+                    method: bestMethod,
                     score: bestScore,
                 });
-
-                // 推进到下一个画面
-                frameIdx = Math.min(frameIdx + 1, frameDescriptions.length - 1);
             });
+
+            // 按时间顺序排列
+            matches.sort((a, b) => a.startTime - b.startTime);
+
+            const totalClipTime = matches.reduce((sum, m) => sum + (m.endTime - m.startTime), 0);
+            const aiCount = matches.filter(m => m.method === 'ai_vision').length;
+            console.log(`🎬 AI视觉剪辑：${numParagraphs}段 × 约${Math.round(clipDuration)}秒 = 约${Math.round(totalClipTime / 60)}分钟（AI匹配 ${aiCount}/${numParagraphs}）`);
 
             return matches;
         }
@@ -1644,7 +1773,10 @@
         // ==================== 渲染时间线 ====================
         function renderTimeline(matches, totalDuration) {
             const container = document.getElementById('timelineItems');
-            container.innerHTML = '';
+            const totalClipDuration = matches.reduce((s, m) => s + (m.endTime - m.startTime), 0);
+            container.innerHTML = `<div style="background:var(--surface2);border-radius:8px;padding:10px 14px;margin-bottom:10px;border:1px solid var(--accent);opacity:0.9;">
+                <span style="font-size:13px;">🎬 <b>${matches.length}</b> 个精选片段 · 总时长约 <b style="color:var(--accent);">${formatTime(totalClipDuration)}</b> · 原片 <span style="color:var(--text2);">${formatTime(totalDuration)}</span> → 浓缩为 <b style="color:var(--green);">${Math.round(totalClipDuration / totalDuration * 100)}%</b></span>
+            </div>`;
 
             matches.forEach((m, i) => {
                 const startPct = (m.startTime / totalDuration) * 100;
@@ -1655,6 +1787,7 @@
                     : '<span style="color:var(--gold);font-size:10px;">🔑 关键词匹配</span>';
 
                 const div = document.createElement('div');
+                div.setAttribute('data-clip', 'true');
                 div.style.cssText = 'background:var(--surface2);border-radius:8px;padding:10px 12px;border-left:3px solid var(--accent);';
                 div.innerHTML = `
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
@@ -2189,7 +2322,8 @@
 
         function confirmCopyAndEdit() {
             if (!APP_STATE.generatedCopy) { showToast('请先生成文案', 'error'); return; }
-            startEditing(APP_STATE.generatedCopy);
+            const targetDuration = getTargetDuration();
+            startEditing(APP_STATE.generatedCopy, targetDuration);
         }
 
         function editGeneratedCopy() {
@@ -2220,9 +2354,11 @@
         }
 
         // ==================== AI剪辑流程 ====================
-        function startEditing(copywriting) {
+        function startEditing(copywriting, targetDuration) {
             if (!APP_STATE.uploadedFile) { showToast('请先上传电影文件', 'error'); return; }
+            targetDuration = targetDuration || 900; // default 15 minutes
 
+            APP_STATE.targetDuration = targetDuration;
             APP_STATE.isEditing = true;
             APP_STATE.editCompleted = false;
             APP_STATE.editProgress = 0;
@@ -2296,10 +2432,10 @@
                 document.getElementById('step3').classList.add('active');
 
                 if (frameDescriptions && frameDescriptions.length > 0) {
-                    matches = matchCopyToScenes(paragraphs, frameDescriptions, totalDuration);
+                    matches = matchCopyToScenes(paragraphs, frameDescriptions, totalDuration, targetDuration);
                 } else {
                     const frameCount = frames ? frames.totalFrames : Math.floor(totalDuration / 8);
-                    matches = keywordBasedMatching(paragraphs, totalDuration, frameCount);
+                    matches = keywordBasedMatching(paragraphs, totalDuration, targetDuration, frameCount);
                 }
 
                 document.getElementById('step3').classList.add('done');
@@ -2331,8 +2467,11 @@
                         document.getElementById('completeBox').classList.add('show');
                         document.getElementById('completeBox').scrollIntoView({ behavior: 'smooth' });
 
+                        const totalClipDuration = matches.reduce((s, m) => s + (m.endTime - m.startTime), 0);
                         const visionUsed = frameDescriptions && frameDescriptions.length > 0;
-                        showToast('🎉 视频生成完成！共 ' + matches.length + ' 段，' + (visionUsed ? 'AI视觉匹配' : '智能匹配'), 'success');
+                        showToast('🎉 剪辑完成！' + matches.length + ' 段精选，总长约 ' + formatTime(totalClipDuration) + '（' + (visionUsed ? 'AI视觉匹配' : '智能匹配') + '）', 'success');
+                        document.getElementById('progressText').textContent =
+                            `✅ AI 已从全片精选出 ${matches.length} 个片段，总时长约 ${formatTime(totalClipDuration)}（目标 ${formatTime(targetDuration)}）`;
                     }, 1000);
                 }, 800);
             })();
@@ -2491,15 +2630,22 @@
             });
             recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
 
-            const startTime = Date.now();
+            const renderStartTime = Date.now();
             const updateUI = () => {
                 if (!renderState.active) return;
-                const pct = video.currentTime / duration * 100;
-                document.getElementById('renderProgressBar').style.width = pct + '%';
-                const elapsed = (Date.now() - startTime) / 1000;
-                const remaining = (duration - video.currentTime) * (elapsed / Math.max(video.currentTime, 0.1));
+                // 用已处理片段数计算进度
+                const pct = timelineMatches.length > 1
+                    ? (currentClipIdx / timelineMatches.length) * 100
+                    : (video.currentTime / duration) * 100;
+                document.getElementById('renderProgressBar').style.width = Math.min(100, pct) + '%';
+                const elapsed = (Date.now() - renderStartTime) / 1000;
+                const remaining = timelineMatches.length > 1
+                    ? (elapsed / Math.max(currentClipIdx, 1)) * (timelineMatches.length - currentClipIdx)
+                    : (duration - video.currentTime) * (elapsed / Math.max(video.currentTime, 0.1));
                 document.getElementById('renderProgressText').textContent =
-                    `正在渲染... ${formatTime(video.currentTime)} / ${formatTime(duration)}`;
+                    timelineMatches.length > 1
+                        ? `🎬 渲染片段 ${Math.min(currentClipIdx + 1, timelineMatches.length)}/${timelineMatches.length}`
+                        : `正在渲染... ${formatTime(video.currentTime)} / ${formatTime(duration)}`;
                 document.getElementById('renderTimeEstimate').textContent =
                     '预计剩余 ' + formatTime(Math.max(0, remaining));
             };
@@ -2585,12 +2731,60 @@
                 return lines.length > 0 ? lines : [text];
             }
 
-            // 开始渲染
+            // ======== 逐段渲染（Clip-by-Clip） ========
+            // 使用时间线数据逐段 seek + play + record，而非整片从头播放
             document.getElementById('renderProgressText').textContent = '正在初始化渲染...';
-            video.currentTime = 0;
             video.muted = false; // 恢复音频以捕获
-            video.play().catch(() => {});
 
+            let currentClipIdx = 0;
+            let allClipsProcessed = false;
+
+            function renderNextClip() {
+                if (!renderState.active || renderState.cancel || allClipsProcessed) return;
+
+                if (currentClipIdx >= timelineMatches.length) {
+                    // 所有片段处理完毕
+                    allClipsProcessed = true;
+                    clearInterval(uiTimer);
+                    recorder.stop();
+                    renderState.active = false;
+                    document.getElementById('btnCancelRender').style.display = 'none';
+                    document.getElementById('renderProgressBar').style.width = '100%';
+                    document.getElementById('renderProgressText').textContent = '正在封装视频文件...';
+                    document.getElementById('renderTimeEstimate').textContent =
+                        `共渲染 ${timelineMatches.length} 个片段，总计约 ${formatTime(timelineMatches.reduce((s, c) => s + (c.end - c.start), 0))}`;
+                    return;
+                }
+
+                const clip = timelineMatches[currentClipIdx];
+                video.currentTime = clip.start;
+                document.getElementById('renderProgressText').textContent =
+                    `🎬 渲染片段 ${currentClipIdx + 1}/${timelineMatches.length}：${formatTime(clip.start)} ~ ${formatTime(clip.end)}`;
+
+                const onSeeked = () => {
+                    video.removeEventListener('seeked', onSeeked);
+                    video.play().catch(() => {});
+                };
+
+                const onTimeUpdate = () => {
+                    if (!renderState.active || renderState.cancel) {
+                        video.removeEventListener('timeupdate', onTimeUpdate);
+                        return;
+                    }
+                    if (video.currentTime >= clip.end) {
+                        video.pause();
+                        video.removeEventListener('timeupdate', onTimeUpdate);
+                        currentClipIdx++;
+                        // 短暂延迟后处理下一段
+                        setTimeout(() => renderNextClip(), 50);
+                    }
+                };
+
+                video.addEventListener('seeked', onSeeked);
+                video.addEventListener('timeupdate', onTimeUpdate);
+            }
+
+            // 启动渲染循环
             recorder.start();
 
             video.onplay = () => {
@@ -2598,7 +2792,28 @@
                 requestAnimationFrame(drawFrame);
             };
 
-            video.onended = () => {
+            // 如果有时间线数据（多段剪辑），使用逐段渲染；否则从头播放
+            if (timelineMatches.length > 1 || (timelineMatches.length === 1 && timelineMatches[0].end - timelineMatches[0].start < duration * 0.9)) {
+                // 多段剪辑 → 逐段渲染
+                renderNextClip();
+            } else {
+                // 没有时间线数据，播放全片
+                video.currentTime = 0;
+                video.play().catch(() => {});
+                video.onended = () => {
+                    clearInterval(uiTimer);
+                    recorder.stop();
+                    renderState.active = false;
+                    document.getElementById('btnCancelRender').style.display = 'none';
+                    document.getElementById('renderProgressBar').style.width = '100%';
+                    document.getElementById('renderProgressText').textContent = '正在封装视频文件...';
+                    document.getElementById('renderTimeEstimate').textContent = '';
+                };
+            }
+
+            // 兼容 ended 事件（全片模式的后备）
+            video.addEventListener('ended', () => {
+                if (allClipsProcessed) return; // 逐段模式已经处理过了
                 clearInterval(uiTimer);
                 recorder.stop();
                 renderState.active = false;
@@ -2606,23 +2821,23 @@
                 document.getElementById('renderProgressBar').style.width = '100%';
                 document.getElementById('renderProgressText').textContent = '正在封装视频文件...';
                 document.getElementById('renderTimeEstimate').textContent = '';
+            });
 
-                recorder.onstop = () => {
-                    const blob = new Blob(chunks, { type: mimeType });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    const outName = (APP_STATE.uploadedFile.name.replace(/\.[^.]+$/, '') || 'output') + '_解说版.webm';
-                    a.download = outName;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                    URL.revokeObjectURL(video.src);
-                    audioCtx.close();
+            recorder.onstop = () => {
+                const blob = new Blob(chunks, { type: mimeType });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                const outName = (APP_STATE.uploadedFile.name.replace(/\.[^.]+$/, '') || 'output') + '_解说版.webm';
+                a.download = outName;
+                a.click();
+                URL.revokeObjectURL(url);
+                URL.revokeObjectURL(video.src);
+                audioCtx.close();
 
-                    document.getElementById('renderProgressText').textContent = '✅ 渲染完成！视频已自动下载';
-                    document.getElementById('btnCancelRender').style.display = 'none';
-                    showToast('✅ 视频渲染完成！字幕已烧录到视频中', 'success');
-                };
+                document.getElementById('renderProgressText').textContent = '✅ 渲染完成！视频已自动下载';
+                document.getElementById('btnCancelRender').style.display = 'none';
+                showToast('✅ 视频渲染完成！字幕已烧录到视频中', 'success');
             };
 
             video.onerror = () => {
@@ -2739,7 +2954,9 @@
             const renderCard = document.getElementById('renderCard');
             renderCard.style.display = 'block';
             renderCard.scrollIntoView({ behavior: 'smooth' });
-            document.getElementById('renderProgressText').textContent = '正在上传视频到云端...';
+            const totalClipSec = timelineData.reduce((s, t) => s + (t.endTime - t.startTime), 0);
+            document.getElementById('renderProgressText').textContent =
+                `📤 正在上传视频（${timelineData.length} 个片段，总长约 ${formatTime(totalClipSec)}）到云端...`;
             document.getElementById('btnCancelRender').style.display = 'none';
 
             const formData = new FormData();

@@ -18,6 +18,17 @@ export async function onRequestPost({ request, env }) {
       return Response.json({ success: false, error: '未配置视觉 AI Key' }, { status: 500 });
     }
 
+    // 检查模型是否支持视觉识别（多模态）
+    const VISION_CAPABLE = ['vl', 'vision', 'gpt-4o', 'gpt-4v', 'claude-3', 'claude-4', 'gemini', 'multimodal'];
+    const isVisionCapable = VISION_CAPABLE.some(k => modelName.toLowerCase().includes(k));
+    if (!isVisionCapable) {
+      return Response.json({
+        success: false,
+        error: `模型 "${modelName}" 不支持图片识别（非多模态模型）`,
+        hint: '请使用通义千问 VL（免费额度）：1.去 dashscope.aliyun.com 获取 Key → 2.在 Cloudflare Secrets 添加 QIANWEN_API_KEY → 3.视觉引擎选「通义千问 VL」',
+      }, { status: 400 });
+    }
+
     const results = [];
 
     for (let i = 0; i < frames.length; i++) {
