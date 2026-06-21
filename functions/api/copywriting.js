@@ -57,7 +57,7 @@ function getAPIKey(env, provider) {
   const keys = {
     deepseek: env.DEEPSEEK_API_KEY,
     doubao:   env.DOUBAO_API_KEY,
-    qianwen:  env.QIANWEN_API_KEY,
+    qianwen:  env.QIANWEN_API_KEY || env.TONGYIQIANWEN_API_KEY || env.DASHSCOPE_API_KEY,
     yuanbao:  env.YUANBAO_API_KEY,
     custom:   env.CUSTOM_API_KEY,
   };

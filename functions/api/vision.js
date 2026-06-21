@@ -88,9 +88,17 @@ export async function onRequestPost({ request, env }) {
 }
 
 function getVisionKey(env, provider) {
-  return env[provider.toUpperCase() + '_VISION_KEY'] ||
-    env[provider.toUpperCase() + '_API_KEY'] ||
-    '';
+  // 支持多种变量名：QIANWEN_API_KEY、TONGYIQIANWEN_API_KEY 等
+  const candidates = [
+    env[provider.toUpperCase() + '_VISION_KEY'],
+    env[provider.toUpperCase() + '_API_KEY'],
+  ];
+  // 通义千问的别名
+  if (provider === 'qianwen') {
+    candidates.push(env['TONGYIQIANWEN_API_KEY']);
+    candidates.push(env['DASHSCOPE_API_KEY']);
+  }
+  return candidates.find(k => k && k.trim()) || '';
 }
 
 function getVisionEndpoint(env, provider) {
