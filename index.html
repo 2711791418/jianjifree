@@ -2777,25 +2777,61 @@
         function previewVideo() {
             if (!APP_STATE.uploadedFile) { showToast('请先上传视频文件', 'error'); return; }
 
-            // 解析文案（优先用生成的，否则用输入的）
             const copywriting = APP_STATE.generatedCopy ||
                 document.getElementById('userCopywriting').value.trim();
             if (!copywriting) { showToast('没有文案内容', 'error'); return; }
 
-            // 按句子拆分文案
+            // 解析时间线片段
+            const clips = [];
+            const timelineItems = document.getElementById('timelineItems');
+            if (timelineItems && timelineItems.children.length > 0) {
+                Array.from(timelineItems.children).forEach(item => {
+                    const match = item.textContent.match(/(\d+):(\d+)\s*~\s*(\d+):(\d+)/);
+                    if (match) {
+                        clips.push({
+                            start: parseInt(match[1]) * 60 + parseInt(match[2]),
+                            end: parseInt(match[3]) * 60 + parseInt(match[4]),
+                        });
+                    }
+                });
+            }
+
+            // 如果没有剪辑数据，提示用户先点 AI 剪辑
+            if (clips.length === 0) {
+                showToast('请先点「开始AI剪辑」生成时间线，再进行预览', 'error');
+                return;
+            }
+
+            // 按句子拆分文案，分配到各片段
             const sentences = copywriting.split(/[。！？\n]+/).filter(s => s.trim().length > 5);
-            if (sentences.length === 0) { sentences.push(copywriting); }
+            if (sentences.length === 0) sentences.push(copywriting);
+
+            // 为每个片段分配字幕时间
+            const timedSubtitles = [];
+            clips.forEach((clip, ci) => {
+                const sentStart = Math.floor(ci * sentences.length / clips.length);
+                const sentEnd = Math.floor((ci + 1) * sentences.length / clips.length);
+                const clipSents = sentences.slice(sentStart, sentEnd);
+                if (clipSents.length > 0) {
+                    const subDur = (clip.end - clip.start) / clipSents.length;
+                    clipSents.forEach((s, si) => {
+                        timedSubtitles.push({
+                            text: s.trim(),
+                            showAt: clip.start + si * subDur,
+                            hideAt: clip.start + (si + 1) * subDur,
+                        });
+                    });
+                }
+            });
 
             // 创建弹窗
             const overlay = document.createElement('div');
             overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;';
 
-            // 关闭按钮
             const closeBtn = document.createElement('button');
             closeBtn.textContent = '✕ 关闭';
             closeBtn.style.cssText = 'position:absolute;top:16px;right:16px;background:var(--accent);color:#fff;border:none;padding:10px 20px;border-radius:25px;font-size:14px;cursor:pointer;z-index:10;font-family:inherit;';
 
-            // 视频容器（相对定位以叠加字幕）
             const videoContainer = document.createElement('div');
             videoContainer.style.cssText = 'position:relative;max-width:90vw;max-height:70vh;';
 
@@ -2804,7 +2840,6 @@
             video.controls = true;
             video.style.cssText = 'max-width:90vw;max-height:70vh;border-radius:8px;display:block;';
 
-            // 字幕叠加层
             const subtitleOverlay = document.createElement('div');
             subtitleOverlay.style.cssText =
                 'position:absolute;bottom:10%;left:50%;transform:translateX(-50%);' +
@@ -2815,94 +2850,117 @@
                 'text-shadow:' + (APP_STATE.currentSubtitleStroke === 'none' ? 'none' : APP_STATE.currentSubtitleStroke) + ';' +
                 'background:' + (APP_STATE.currentSubtitleBg === 'none' ? 'transparent' : APP_STATE.currentSubtitleBg) + ';' +
                 'transition:opacity 0.3s;opacity:0;max-width:85%;line-height:1.6;';
-            subtitleOverlay.textContent = '字幕将在此显示';
 
             videoContainer.appendChild(video);
             videoContainer.appendChild(subtitleOverlay);
 
-            // 信息栏
+            const totalClipTime = clips.reduce((s, c) => s + (c.end - c.start), 0);
             const infoBar = document.createElement('div');
             infoBar.style.cssText = 'color:#fff;font-size:14px;margin-bottom:12px;display:flex;gap:20px;align-items:center;flex-wrap:wrap;justify-content:center;';
-            infoBar.innerHTML = '<span>🎬 实时预览模式</span><span>💬 字幕叠加</span><span>🔊 TTS配音</span><span style="color:var(--text2);font-size:12px;">（非最终渲染视频）</span>';
+            infoBar.innerHTML = `<span>🎬 剪辑版预览</span><span>📋 ${clips.length} 个片段</span><span>⏱ 约 ${formatTime(totalClipTime)}</span>`;
 
-            // 段落跳转按钮
+            // 片段跳转按钮
             const timelineDiv = document.createElement('div');
             timelineDiv.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;max-width:90vw;margin-top:10px;justify-content:center;';
-            const timelineItems = document.getElementById('timelineItems');
-            if (timelineItems && timelineItems.children.length > 0) {
-                Array.from(timelineItems.children).forEach((item, i) => {
-                    const btn = document.createElement('button');
-                    const match = item.textContent.match(/(\d+):(\d+)\s*~\s*(\d+):(\d+)/);
-                    btn.textContent = '段落' + (i + 1);
-                    btn.style.cssText = 'background:var(--surface2);color:var(--text);border:1px solid var(--border);padding:5px 12px;border-radius:14px;font-size:11px;cursor:pointer;font-family:inherit;';
-                    if (match) {
-                        const sec = parseInt(match[1]) * 60 + parseInt(match[2]);
-                        btn.onclick = () => { video.currentTime = sec; video.play().catch(() => {}); };
-                    }
-                    timelineDiv.appendChild(btn);
-                });
+            clips.forEach((clip, i) => {
+                const btn = document.createElement('button');
+                btn.textContent = `第${i + 1}段`;
+                btn.title = `${formatTime(clip.start)} ~ ${formatTime(clip.end)}`;
+                btn.style.cssText = 'background:var(--surface2);color:var(--text);border:1px solid var(--border);padding:5px 12px;border-radius:14px;font-size:11px;cursor:pointer;font-family:inherit;';
+                btn.onclick = () => {
+                    currentClipIdx = i;
+                    video.currentTime = clip.start;
+                    video.play().catch(() => {});
+                };
+                timelineDiv.appendChild(btn);
+            });
+
+            // ======== 逐段播放引擎 ========
+            let currentClipIdx = 0;
+            let currentSubIdx = -1;
+            let wasPlaying = false;
+
+            function getCurrentClip() {
+                return clips[currentClipIdx] || null;
             }
 
-            // ======== 字幕 + TTS 同步引擎 ========
-            let subtitleTimer = null;
-            let currentIdx = -1;
-            let ttsUtterance = null;
-
-            function stopAll() {
-                if (subtitleTimer) clearInterval(subtitleTimer);
-                if (window.speechSynthesis) window.speechSynthesis.cancel();
-            }
-
-            function updateSubtitle() {
-                if (!video.duration || video.paused) return;
+            video.ontimeupdate = () => {
                 const t = video.currentTime;
-                const duration = video.duration;
-                // 根据当前播放时间计算应该显示哪句
-                const idx = Math.min(sentences.length - 1, Math.floor((t / duration) * sentences.length));
+                const clip = getCurrentClip();
 
-                if (idx !== currentIdx) {
-                    currentIdx = idx;
-                    subtitleOverlay.textContent = sentences[idx].trim();
-                    subtitleOverlay.style.opacity = '1';
-
-                    // TTS 配音
-                    if (window.speechSynthesis && sentences[idx].trim().length > 0) {
-                        window.speechSynthesis.cancel();
-                        ttsUtterance = new SpeechSynthesisUtterance(sentences[idx].trim());
-                        const voices = window.speechSynthesis.getVoices();
-                        const selectedName = document.getElementById('voiceSelect').value;
-                        const voice = voices.find(v => v.name === selectedName);
-                        if (voice) ttsUtterance.voice = voice;
-                        ttsUtterance.rate = APP_STATE.currentVoiceRate;
-                        ttsUtterance.pitch = APP_STATE.currentVoicePitch;
-                        ttsUtterance.volume = APP_STATE.currentVoiceVolume;
-                        ttsUtterance.lang = 'zh-CN';
-                        window.speechSynthesis.speak(ttsUtterance);
+                // 找到当前字幕
+                let foundSub = null;
+                for (let i = 0; i < timedSubtitles.length; i++) {
+                    if (t >= timedSubtitles[i].showAt && t <= timedSubtitles[i].hideAt) {
+                        foundSub = timedSubtitles[i];
+                        if (i !== currentSubIdx) {
+                            currentSubIdx = i;
+                            subtitleOverlay.textContent = foundSub.text;
+                            subtitleOverlay.style.opacity = '1';
+                            // TTS
+                            if (window.speechSynthesis && foundSub.text.length > 0) {
+                                window.speechSynthesis.cancel();
+                                const u = new SpeechSynthesisUtterance(foundSub.text);
+                                const voices = window.speechSynthesis.getVoices();
+                                const selectedName = document.getElementById('voiceSelect')?.value;
+                                if (selectedName) {
+                                    const voice = voices.find(v => v.name === selectedName);
+                                    if (voice) u.voice = voice;
+                                }
+                                u.rate = APP_STATE.currentVoiceRate;
+                                u.pitch = APP_STATE.currentVoicePitch;
+                                u.volume = APP_STATE.currentVoiceVolume;
+                                u.lang = 'zh-CN';
+                                window.speechSynthesis.speak(u);
+                            }
+                        }
+                        break;
                     }
                 }
-            }
+                if (!foundSub) {
+                    subtitleOverlay.style.opacity = '0';
+                }
 
-            video.onplay = () => {
-                subtitleTimer = setInterval(updateSubtitle, 300);
+                // 检查当前片段是否结束
+                if (clip && t >= clip.end) {
+                    video.pause();
+                    currentClipIdx++;
+                    if (currentClipIdx < clips.length) {
+                        // 跳到下一段
+                        setTimeout(() => {
+                            video.currentTime = clips[currentClipIdx].start;
+                            video.play().catch(() => {});
+                        }, 150);
+                    } else {
+                        // 全部播放完毕
+                        subtitleOverlay.style.opacity = '0';
+                        subtitleOverlay.textContent = '✅ 预览完毕';
+                        subtitleOverlay.style.opacity = '1';
+                        setTimeout(() => { subtitleOverlay.style.opacity = '0'; }, 2000);
+                        if (window.speechSynthesis) window.speechSynthesis.cancel();
+                    }
+                }
             };
+
             video.onpause = () => {
-                if (subtitleTimer) clearInterval(subtitleTimer);
-                if (window.speechSynthesis) window.speechSynthesis.cancel();
-                subtitleOverlay.style.opacity = '0';
-            };
-            video.onended = () => {
-                if (subtitleTimer) clearInterval(subtitleTimer);
-                subtitleOverlay.style.opacity = '0';
-                if (window.speechSynthesis) window.speechSynthesis.cancel();
-            };
-            video.onseeked = () => {
-                currentIdx = -1; // 重置以触发新字幕
                 if (window.speechSynthesis) window.speechSynthesis.cancel();
             };
 
-            // 关闭清理
+            video.onseeked = () => {
+                currentSubIdx = -1;
+                if (window.speechSynthesis) window.speechSynthesis.cancel();
+                // 根据 seek 位置找到对应片段
+                const t = video.currentTime;
+                for (let i = clips.length - 1; i >= 0; i--) {
+                    if (t >= clips[i].start) {
+                        currentClipIdx = i;
+                        break;
+                    }
+                }
+            };
+
             function cleanup() {
-                stopAll();
+                if (window.speechSynthesis) window.speechSynthesis.cancel();
                 URL.revokeObjectURL(video.src);
                 overlay.remove();
             }
@@ -2917,11 +2975,13 @@
             overlay.appendChild(timelineDiv);
             document.body.appendChild(overlay);
 
+            // 从第一个片段开始播放
             video.onloadedmetadata = () => {
+                video.currentTime = clips[0].start;
                 video.play().catch(() => {});
             };
 
-            showToast('👁️ 实时预览模式：字幕叠加 + TTS配音同步播放');
+            showToast(`👁️ 预览剪辑版：${clips.length} 个片段 · 总计约 ${formatTime(totalClipTime)}`);
         }
 
         // ==================== 字幕预览 ====================
