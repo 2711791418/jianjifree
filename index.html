@@ -1436,10 +1436,20 @@
 
                 video.onloadedmetadata = async function() {
                     const duration = video.duration;
-                    const totalFrames = Math.max(2, Math.min(maxFrames, Math.floor(duration / intervalSec)));
+                    // 计算实际间隔：确保帧均匀覆盖整部电影
+                    let actualInterval = intervalSec;
+                    const rawCount = Math.floor(duration / actualInterval);
+                    let totalFrames;
+                    if (rawCount > maxFrames) {
+                        // 帧数过多 → 拉大间隔覆盖全片
+                        totalFrames = maxFrames;
+                        actualInterval = duration / maxFrames;
+                    } else {
+                        totalFrames = Math.max(2, rawCount);
+                    }
                     const frameTimes = [];
                     for (let i = 0; i < totalFrames; i++) {
-                        frameTimes.push((i + 0.3) * intervalSec);
+                        frameTimes.push(Math.min(i * actualInterval + actualInterval * 0.3, duration - 0.1));
                     }
 
                     const canvas = document.createElement('canvas');
