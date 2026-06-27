@@ -657,11 +657,11 @@
                     </div>
                     <div class="progress-text" id="progressText">准备中...</div>
                     <div class="progress-steps">
-                        <div class="step" id="step1">提取画面</div>
-                        <div class="step" id="step2">AI识图</div>
-                        <div class="step" id="step3">匹配文案</div>
-                        <div class="step" id="step4">合成配音</div>
-                        <div class="step" id="step5">渲染输出</div>
+                        <div class="step" id="step1">读取视频</div>
+                        <div class="step" id="step2">音频转文字</div>
+                        <div class="step" id="step3">AI分章匹配</div>
+                        <div class="step" id="step4">画面精调</div>
+                        <div class="step" id="step5">生成时间线</div>
                     </div>
                     <!-- AI 画面分析日志 -->
                     <div id="visionLog" style="margin-top:10px;max-height:160px;overflow-y:auto;font-size:11px;color:var(--text2);display:none;background:var(--surface2);border-radius:8px;padding:10px;line-height:1.7;"></div>
@@ -1743,7 +1743,9 @@
                 const startPct = (m.startTime / totalDuration) * 100;
                 const widthPct = Math.max(2, ((m.endTime - m.startTime) / totalDuration) * 100);
 
-                const methodLabel = m.method === 'ai_match'
+                const methodLabel = m.method === 'story_match'
+                    ? '<span style="color:var(--green);font-size:10px;">📖 文字分析匹配</span>'
+                    : m.method === 'ai_match'
                     ? '<span style="color:var(--green);font-size:10px;">🧠 AI智能匹配</span>'
                     : m.method === 'ai_vision'
                     ? '<span style="color:var(--green);font-size:10px;">👁️ AI视觉匹配</span>'
@@ -2364,8 +2366,10 @@
             (async function runEditPipeline() {
                 let matches = null;
                 let totalDuration = 120;
+                let storyChapters = [];
 
-                // ---- 获取视频时长（快速，不需抽帧）----
+                // ---- 步骤1：获取视频时长 ----
+                updateProgress(2, '读取视频信息...', 1);
                 try {
                     const tempVid = document.createElement('video');
                     tempVid.src = URL.createObjectURL(APP_STATE.uploadedFile);
@@ -2375,53 +2379,105 @@
                     });
                     URL.revokeObjectURL(tempVid.src);
                     document.getElementById('step1').classList.add('done');
-                    updateProgress(10, `视频时长 ${formatTime(totalDuration)}，准备 AI 剪辑...`, 1);
+                    updateProgress(8, `视频时长 ${formatTime(totalDuration)}`, 1);
                 } catch (e) {
                     document.getElementById('step1').classList.add('done');
-                    updateProgress(10, '读取视频时长失败，使用默认值', 1);
+                    updateProgress(8, '读取时长失败', 1);
                 }
 
-                // ---- 步骤2+3：AI 智能匹配（有视觉AI）或关键词匹配（无视觉AI）----
-                let aiResults = null;
+                // ---- 步骤2：音频转文字 + AI分章节匹配 ----
+                const aiConfig = getAIConfig();
+                let storyMatches = null;
+                const backendUrl = getBackendUrl();
 
-                if (hasVisionAI) {
-                    // 有视觉AI → 密集抽帧 + AI直接匹配
+                if (backendUrl && aiConfig.provider) {
                     document.getElementById('step2').classList.add('active');
-                    updateProgress(12, '正在密集提取视频画面（每2秒一张，最多120张）...', 2);
+                    updateProgress(10, '正在提取电影音频/字幕转为文字...', 2);
+
                     try {
-                        const denseFrames = await extractVideoFrames(APP_STATE.uploadedFile, 2, 120, 0.5, 480);
-                        totalDuration = denseFrames.duration || totalDuration;
-                        updateProgress(25, `已提取 ${denseFrames.totalFrames} 张画面，正在发送给AI分析...`, 2);
+                        const fd = new FormData();
+                        fd.append('video', APP_STATE.uploadedFile);
+                        const transResp = await fetch(backendUrl + '/api/transcribe', { method: 'POST', body: fd });
+                        const transData = await transResp.json();
 
-                        aiResults = await aiMatchFramesToSentences(
-                            denseFrames.frames,
-                            clipUnits,
-                            visionConfig.provider,
-                            visionConfig.model
-                        );
+                        if (transData.success && transData.transcript && transData.transcript.length > 0) {
+                            updateProgress(20, `已提取 ${transData.transcript.length} 条音频文本，AI 正在分章节匹配...`, 2);
 
-                        if (aiResults && aiResults.length > 0) {
+                            // AI: 分章节 + 匹配解说词
+                            const matchResp = await fetch('/api/story-match', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    provider: aiConfig.provider,
+                                    model: aiConfig.model,
+                                    transcript: transData.transcript,
+                                    commentary: clipUnits,
+                                }),
+                            });
+                            const matchData = await matchResp.json();
+
+                            if (matchData.success && matchData.matches && matchData.matches.length > 0) {
+                                storyMatches = matchData.matches;
+                                storyChapters = matchData.chapters || [];
+                                document.getElementById('step2').classList.add('done');
+                                updateProgress(40, `AI 完成！分 ${storyChapters.length} 个章节，匹配 ${storyMatches.length} 句解说`, 2);
+                            } else {
+                                document.getElementById('step2').classList.add('done');
+                                updateProgress(30, '故事匹配失败，降级到画面匹配', 2);
+                            }
+                        } else if (transData.hasEmbeddedSubtitles === false) {
                             document.getElementById('step2').classList.add('done');
-                            updateProgress(50, `AI 已看完 ${denseFrames.totalFrames} 张画面，为 ${aiResults.length} 句文案匹配了画面`, 2);
-                        } else {
-                            document.getElementById('step2').classList.add('done');
-                            updateProgress(50, 'AI匹配失败，降级为关键词匹配', 2);
+                            updateProgress(25, '无字幕且未配置ASR，使用画面匹配', 2);
                         }
                     } catch (e) {
                         document.getElementById('step2').classList.add('done');
-                        updateProgress(50, '视觉AI不可用，使用关键词匹配', 2);
+                        updateProgress(25, '音频转文字失败，使用画面匹配', 2);
                     }
                 } else {
                     document.getElementById('step2').classList.add('done');
-                    updateProgress(30, '未配置视觉AI，使用关键词智能匹配', 2);
+                    updateProgress(20, '未配置后端/文本AI，跳过文字分析', 2);
                 }
 
-                // ---- 步骤3：生成时间线 ----
-                updateProgress(55, '正在生成剪辑时间线...', 3);
-                document.getElementById('step3').classList.add('active');
+                // ---- 步骤3：画面匹配（有视觉AI时；如果有story matches则作为精调）----
+                let aiResults = null;
 
-                if (aiResults && aiResults.length > 0) {
-                    // AI 直接返回了帧→时间映射，转换为 matches 格式
+                if (hasVisionAI && !storyMatches) {
+                    // 无文字匹配 → 视觉AI密集抽帧匹配
+                    updateProgress(28, '正在密集提取视频画面...', 3);
+                    document.getElementById('step3').classList.add('active');
+                    try {
+                        const denseFrames = await extractVideoFrames(APP_STATE.uploadedFile, 2, 120, 0.5, 480);
+                        totalDuration = denseFrames.duration || totalDuration;
+                        updateProgress(35, `已提取 ${denseFrames.totalFrames} 张画面，AI分析中...`, 3);
+                        aiResults = await aiMatchFramesToSentences(denseFrames.frames, clipUnits, visionConfig.provider, visionConfig.model);
+                        if (aiResults && aiResults.length > 0) {
+                            updateProgress(55, `AI 匹配 ${aiResults.length} 句`, 3);
+                        }
+                    } catch (e) {
+                        updateProgress(40, '视觉AI不可用', 3);
+                    }
+                    document.getElementById('step3').classList.add('done');
+                } else if (storyMatches) {
+                    document.getElementById('step3').classList.add('done');
+                    updateProgress(50, '已通过文字分析精确匹配，跳过画面扫描', 3);
+                }
+
+                // ---- 步骤4：生成最终时间线 ----
+                updateProgress(60, '正在生成剪辑时间线...', 3);
+                if (!document.getElementById('step3').classList.contains('done')) {
+                    document.getElementById('step3').classList.add('active');
+                }
+
+                if (storyMatches && storyMatches.length > 0) {
+                    // 优先用文字匹配结果（最精确）
+                    matches = storyMatches.map((m, i) => ({
+                        text: (clipUnits[m.commentaryIdx] || clipUnits[i] || {}).text || '',
+                        startTime: m.startTime,
+                        endTime: m.endTime,
+                        frameDesc: `${m.chapterName || 'AI匹配'} · ${m.reason || ''}`,
+                        method: 'story_match',
+                    }));
+                } else if (aiResults && aiResults.length > 0) {
                     matches = aiResults.map((r, i) => ({
                         text: (clipUnits[r.sentenceIdx] || clipUnits[i] || {}).text || '',
                         startTime: r.startTime,
@@ -2463,10 +2519,10 @@
                         document.getElementById('completeBox').scrollIntoView({ behavior: 'smooth' });
 
                         const totalClipDuration = matches.reduce((s, m) => s + (m.endTime - m.startTime), 0);
-                        const aiMatched = aiResults && aiResults.length > 0;
-                        showToast('🎉 剪辑完成！' + matches.length + ' 句文案匹配片段，总长约 ' + formatTime(totalClipDuration) + (aiMatched ? '（AI智能匹配）' : '（关键词匹配）'), 'success');
+                        const matchMethod = storyMatches ? '文字分析' : (aiResults ? 'AI视觉' : '关键词');
+                        showToast('🎉 剪辑完成！' + matches.length + ' 句文案匹配片段，总长约 ' + formatTime(totalClipDuration) + '（' + matchMethod + '匹配）', 'success');
                         document.getElementById('progressText').textContent =
-                            `✅ ${aiMatched ? 'AI 已看完所有画面并' : ''}为 ${matches.length} 句文案匹配画面，总时长约 ${formatTime(totalClipDuration)}（TTS配音驱动）`;
+                            `✅ 通过${matchMethod}为 ${matches.length} 句文案匹配画面，总时长约 ${formatTime(totalClipDuration)}` + (storyChapters.length > 0 ? `，分为 ${storyChapters.length} 个章节` : '');
                     }, 1000);
                 }, 800);
             })();

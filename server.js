@@ -81,6 +81,99 @@ app.post('/api/tts', async (req, res) => {
   }
 });
 
+// ==================== 音频转文字（提取字幕/ASR） ====================
+app.post('/api/transcribe', upload.single('video'), async (req, res) => {
+  const jobId = uuidv4();
+  const workDir = `/tmp/transcribe_${jobId}`;
+  fs.mkdirSync(workDir, { recursive: true });
+
+  try {
+    const videoFile = req.file;
+    if (!videoFile) return res.status(400).json({ error: '缺少视频文件' });
+
+    const inputPath = videoFile.path;
+    let transcript = [];
+
+    // ---- 方法1：提取内嵌字幕 ----
+    try {
+      const subFile = path.join(workDir, 'subtitle.srt');
+      await new Promise((resolve, reject) => {
+        ffmpeg(inputPath)
+          .outputOptions(['-map', '0:s:0?', '-f', 'srt'])
+          .output(subFile)
+          .on('end', resolve)
+          .on('error', (e) => {
+            // 无字幕轨道不算错误
+            resolve();
+          })
+          .run();
+      });
+
+      if (fs.existsSync(subFile) && fs.statSync(subFile).size > 100) {
+        const srtContent = fs.readFileSync(subFile, 'utf-8');
+        transcript = parseSRT(srtContent);
+        console.log(`[${jobId}] 从内嵌字幕提取到 ${transcript.length} 条文本`);
+      }
+    } catch (e) {
+      console.log(`[${jobId}] 无内嵌字幕：${e.message}`);
+    }
+
+    // ---- 方法2：提取音频供外部ASR（如果无字幕）----
+    let audioBase64 = null;
+    if (transcript.length === 0) {
+      const audioFile = path.join(workDir, 'audio.mp3');
+      await new Promise((resolve, reject) => {
+        ffmpeg(inputPath)
+          .outputOptions(['-vn', '-acodec', 'libmp3lame', '-ar', '16000', '-ac', '1', '-b:a', '64k'])
+          .output(audioFile)
+          .on('end', resolve)
+          .on('error', reject)
+          .run();
+      });
+
+      if (fs.existsSync(audioFile)) {
+        const audioBuffer = fs.readFileSync(audioFile);
+        audioBase64 = audioBuffer.toString('base64');
+        console.log(`[${jobId}] 音频已提取，大小 ${Math.round(audioBuffer.length / 1024)}KB`);
+      }
+    }
+
+    fs.rm(workDir, { recursive: true, force: true }, () => {});
+
+    res.json({
+      success: true,
+      transcript,
+      transcriptCount: transcript.length,
+      hasEmbeddedSubtitles: transcript.length > 0,
+      audioBase64: transcript.length === 0 ? audioBase64 : null,
+      audioHint: transcript.length === 0 ? '请将 audioBase64 发送到 ASR 服务（如 OpenAI Whisper API）获取文字稿' : null,
+    });
+  } catch (e) {
+    console.error(`[${jobId}] 转录失败：`, e.message);
+    try { fs.rm(workDir, { recursive: true, force: true }, () => {}); } catch {}
+    res.status(500).json({ error: '转录失败：' + e.message });
+  }
+});
+
+// 解析 SRT 字幕为 [{text, start, end}]
+function parseSRT(content) {
+  const blocks = content.trim().split(/\n\n+/);
+  const result = [];
+  for (const block of blocks) {
+    const lines = block.split('\n');
+    if (lines.length < 3) continue;
+    const timeMatch = lines[1]?.match(/(\d{2}):(\d{2}):(\d{2})[,.](\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})[,.](\d{3})/);
+    if (!timeMatch) continue;
+    const startSec = parseInt(timeMatch[1]) * 3600 + parseInt(timeMatch[2]) * 60 + parseInt(timeMatch[3]) + parseInt(timeMatch[4]) / 1000;
+    const endSec = parseInt(timeMatch[5]) * 3600 + parseInt(timeMatch[6]) * 60 + parseInt(timeMatch[7]) + parseInt(timeMatch[8]) / 1000;
+    const text = lines.slice(2).join(' ').replace(/<[^>]+>/g, '').trim();
+    if (text.length > 0) {
+      result.push({ text, start: startSec, end: endSec });
+    }
+  }
+  return result;
+}
+
 // ==================== 视频渲染 ====================
 app.post('/api/render', upload.single('video'), async (req, res) => {
   const jobId = uuidv4();
