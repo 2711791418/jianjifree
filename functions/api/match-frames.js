@@ -91,13 +91,16 @@ export async function onRequestPost({ request, env }) {
           } catch {}
         }
       } catch (e) {
-        // 某批失败不影响其他批
-        console.log(`Batch ${batch} failed: ${e.message}`);
+        allFrameDescs.push({ index: batch * MAX_IMAGES_PER_CALL, desc: `[批次${batch}API异常]`, time: 0 });
       }
     }
 
     if (allFrameDescs.length === 0) {
-      return Response.json({ success: false, error: '所有批次视觉分析均失败' }, { status: 500 });
+      return Response.json({
+        success: false,
+        error: `所有 ${totalBatches} 批次视觉分析均失败。可能原因：1) API Key 无视觉模型权限 2) 模型名不支持视觉 3) 图片过大`,
+        hint: '如使用通义千问，确认 Key 已开通视觉模型(qwen-vl-plus)；如使用DeepSeek，它不支持图片识别',
+      }, { status: 500 });
     }
 
     // ======== 第二步：用文本AI将画面描述与文案匹配 ========

@@ -1667,7 +1667,12 @@
                     if (errData.hint) {
                         logDiv.innerHTML += `<div style="color:var(--gold);background:rgba(240,192,96,0.1);padding:8px;border-radius:6px;margin:6px 0;">💡 ${errData.hint}</div>`;
                     }
-                    throw new Error(errData.error || 'AI匹配失败 ' + resp.status);
+                    if (errData.raw) {
+                        logDiv.innerHTML += `<div style="color:var(--red);font-size:11px;">📄 AI原始返回：${errData.raw}</div>`;
+                    }
+                    const detail = errData.error || 'AI匹配失败 HTTP' + resp.status;
+                    logDiv.innerHTML += `<div style="color:var(--red);">❌ ${detail}</div>`;
+                    throw new Error(detail);
                 }
 
                 const data = await resp.json();
