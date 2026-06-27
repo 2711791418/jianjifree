@@ -592,17 +592,7 @@
                     <div id="modeAContent" style="margin-top:16px;">
                         <textarea class="copywriting-area" id="userCopywriting" placeholder="在此输入你的电影解说文案...&#10;&#10;例如：这部电影讲述了一个关于勇气与牺牲的故事。主角在命运的十字路口做出了改变一生的选择..."></textarea>
                         <div class="char-count"><span id="charCount">0</span> 字</div>
-                        <div class="admin-row" style="margin-top:12px;">
-                            <label style="font-size:13px;white-space:nowrap;">🎯 成片时长：</label>
-                            <select id="targetDurationA" style="padding:6px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;font-family:inherit;">
-                                <option value="600">10 分钟</option>
-                                <option value="900" selected>15 分钟（推荐）</option>
-                                <option value="1200">20 分钟</option>
-                                <option value="1800">30 分钟</option>
-                                <option value="3600">60 分钟</option>
-                            </select>
-                            <span style="font-size:11px;color:var(--green);">AI 将从全片精选匹配片段，而非整部电影</span>
-                        </div>
+                        <div style="font-size:12px;color:var(--accent);margin-top:10px;">🎙️ 剪辑时长由配音决定：文案 → TTS 配音 → AI 反向匹配画面</div>
                         <div class="btn-group" style="margin-top:14px;">
                             <button class="btn btn-primary" id="btnModeA" onclick="startEditModeA()" disabled>🎬 开始 AI 剪辑</button>
                         </div>
@@ -628,17 +618,7 @@
                                 <span style="font-size:12px;color:var(--text2);">字（200 ~ 10000）</span>
                                 <span style="font-size:12px;color:var(--text2);margin-left:4px;">💡 数值越大生成越久</span>
                             </div>
-                            <div class="admin-row" style="margin-bottom:12px;">
-                                <label style="font-size:13px;white-space:nowrap;">🎯 成片时长：</label>
-                                <select id="targetDurationB" style="padding:6px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;font-family:inherit;">
-                                    <option value="600">10 分钟</option>
-                                    <option value="900" selected>15 分钟（推荐）</option>
-                                    <option value="1200">20 分钟</option>
-                                    <option value="1800">30 分钟</option>
-                                    <option value="3600">60 分钟</option>
-                                </select>
-                                <span style="font-size:11px;color:var(--green);">AI 将从全片精选匹配片段，而非整部电影</span>
-                            </div>
+                            <div style="font-size:12px;color:var(--accent);margin-bottom:10px;">🎙️ 剪辑时长由配音决定：文案 → TTS 配音 → AI 反向匹配画面</div>
                             <div style="margin-bottom:12px;">
                                 <div style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;" onclick="toggleStylePanel()">
                                     <span style="font-size:13px;color:var(--text2);">✒️ 模仿写作风格</span>
@@ -1278,21 +1258,11 @@
         }
 
         // ==================== 模式A：直接剪辑 ====================
-        function getTargetDuration() {
-            // Read from whichever mode is visible
-            const selA = document.getElementById('targetDurationA');
-            const selB = document.getElementById('targetDurationB');
-            const mode = APP_STATE.currentMode;
-            const sel = mode === 'A' ? selA : selB;
-            return parseInt(sel?.value) || 900; // default 15 min
-        }
-
         function startEditModeA() {
             if (!APP_STATE.uploadedFile) { showToast('请先上传电影文件', 'error'); return; }
             const copywriting = document.getElementById('userCopywriting').value.trim();
             if (copywriting.length < 10) { showToast('文案太短，请至少输入10个字', 'error'); return; }
-            const targetDuration = getTargetDuration();
-            startEditing(copywriting, targetDuration);
+            startEditing(copywriting);
         }
 
         // ==================== 模式B：AI生成文案 ====================
@@ -1577,91 +1547,102 @@
             }
         }
 
-        // ==================== 智能剪辑算法（无视觉AI时） ====================
-        // 从整部电影中精选与文案匹配的短片段，总时长控制在 targetDuration
-        function keywordBasedMatching(copyParagraphs, totalDuration, targetDuration, frameCount) {
+        // ==================== TTS 驱动剪辑算法 ====================
+        // clipUnits: [{text, duration}] — 每句话的文本和TTS时长
+        // 为每句话在全片中搜索最匹配的画面片段，片段时长 = 该句配音时长
+        function matchClipsToAudio(clipUnits, frameDescriptions, totalDuration, frameCount) {
             const matches = [];
-            const numParagraphs = copyParagraphs.length;
-            // 每段时长 = 目标总时长 / 段落数，限制在 15~50 秒
-            const clipDuration = Math.max(15, Math.min(50, targetDuration / numParagraphs));
-            const searchStep = Math.max(3, Math.floor(clipDuration / 4)); // 搜索步长
+            const usedRanges = [];
+            const searchStep = 3;
 
-            const usedRanges = []; // 已占用的时间段，避免重叠
+            const validFrames = frameDescriptions ? frameDescriptions.filter(f =>
+                f && f.description &&
+                !f.description.includes('[') &&
+                f.description.length > 3
+            ) : [];
 
-            copyParagraphs.forEach((para, i) => {
-                const keywords = extractKeywords(para);
+            clipUnits.forEach((unit, i) => {
+                const keywords = extractKeywords(unit.text);
+                const clipDuration = unit.duration; // 片段时长 = TTS配音时长
 
-                // 理想位置：按时间轴均匀分布的起始点
-                const idealStart = (i / numParagraphs) * totalDuration;
-                let bestTime = idealStart;
+                let bestTime = (i / clipUnits.length) * totalDuration;
                 let bestScore = -Infinity;
+                let bestFrameDesc = '无画面信息';
+                let bestMethod = 'keyword';
 
-                // 在全片范围内搜索最佳窗口
                 for (let t = 0; t < totalDuration - clipDuration; t += searchStep) {
-                    // 跳过与已选片段重叠超过30%的位置
-                    if (isRangeOverlapping(t, t + clipDuration, usedRanges, 0.3)) continue;
+                    if (isRangeOverlapping(t, t + clipDuration, usedRanges, 0.25)) continue;
 
-                    const score = scoreClipPosition(t, clipDuration, i, numParagraphs, totalDuration, keywords);
+                    let score = scoreClipPosition(t, clipDuration, i, clipUnits.length, totalDuration, keywords);
+
+                    if (validFrames.length > 0) {
+                        const inWindow = validFrames.filter(f => f.time >= t && f.time <= t + clipDuration);
+                        inWindow.forEach(f => {
+                            score += keywordOverlapScore(keywords, f.description) * 2.5;
+                        });
+                    }
+
                     if (score > bestScore) {
                         bestScore = score;
                         bestTime = t;
+                        if (validFrames.length > 0) {
+                            const bestFD = validFrames.find(f => f.time >= t && f.time <= t + clipDuration && keywordOverlapScore(keywords, f.description) > 0);
+                            if (bestFD) {
+                                bestFrameDesc = bestFD.description;
+                                bestMethod = 'ai_vision';
+                            }
+                        }
                     }
                 }
 
+                if (bestMethod === 'keyword') {
+                    bestFrameDesc = '场景 #' + (Math.floor(i * (frameCount || 30) / clipUnits.length) + 1);
+                }
+
                 const startTime = bestTime;
-                const endTime = Math.min(totalDuration, startTime + clipDuration);
+                const endTime = Math.min(totalDuration, bestTime + clipDuration);
                 usedRanges.push({ start: startTime, end: endTime });
 
                 matches.push({
-                    paragraphIndex: i,
-                    text: para.substring(0, 80) + (para.length > 80 ? '...' : ''),
+                    text: unit.text.substring(0, 80) + (unit.text.length > 80 ? '...' : ''),
                     startTime,
                     endTime,
                     keywords,
-                    frameDesc: `场景 #${Math.floor(i * frameCount / numParagraphs) + 1}`,
-                    method: 'keyword',
+                    frameDesc: bestFrameDesc,
+                    method: bestMethod,
+                    clipDuration,
                 });
             });
 
-            // 按时间顺序排列，确保观看流畅
             matches.sort((a, b) => a.startTime - b.startTime);
 
-            const totalClipTime = matches.reduce((sum, m) => sum + (m.endTime - m.startTime), 0);
-            console.log(`🎬 智能剪辑：${numParagraphs} 段 × 约${Math.round(clipDuration)}秒 = 约${Math.round(totalClipTime / 60)}分钟（目标${Math.round(targetDuration / 60)}分钟）`);
+            const totalClipTime = matches.reduce((s, m) => s + (m.endTime - m.startTime), 0);
+            const aiCount = matches.filter(m => m.method === 'ai_vision').length;
+            console.log('TTS驱动剪辑：' + clipUnits.length + ' 句 → 成片 ' + formatTime(totalClipTime) + '（AI匹配 ' + aiCount + '/' + clipUnits.length + '）');
 
             return matches;
         }
 
         // 评分函数：评估某个时间段作为剪辑位置的适合度
-        function scoreClipPosition(startTime, clipDuration, paraIndex, totalParas, totalDuration, keywords) {
+        function scoreClipPosition(startTime, clipDuration, idx, totalCount, totalDuration, keywords) {
             let score = 0;
-
-            // 1. 位置多样性奖励：鼓励覆盖电影的开头/中段/结尾
-            const idealPos = paraIndex / totalParas; // 0~1，该段落在全片中的理想位置比例
+            const idealPos = idx / totalCount;
             const actualPos = (startTime + clipDuration / 2) / totalDuration;
             const posDiff = Math.abs(idealPos - actualPos);
-            score += (1 - posDiff) * 30; // 位置越接近理想，分越高
-
-            // 2. 避免极端位置（片头片尾字幕通常不适合）
-            const marginRatio = 0.03; // 前3%和后3%是片头片尾
-            if (startTime < totalDuration * marginRatio) score -= 20;
-            if (startTime > totalDuration * (1 - marginRatio)) score -= 15;
-
-            // 3. 轻微随机性，避免完全相同的结果
-            score += (Math.sin(startTime * 0.1 + paraIndex) * 0.5 + 0.5) * 10;
-
+            score += (1 - posDiff) * 30;
+            const margin = 0.03;
+            if (startTime < totalDuration * margin) score -= 20;
+            if (startTime > totalDuration * (1 - margin)) score -= 15;
+            score += (Math.sin(startTime * 0.1 + idx) * 0.5 + 0.5) * 8;
             return score;
         }
 
-        // 检查时间段是否与已占用范围重叠
         function isRangeOverlapping(start, end, usedRanges, maxOverlapRatio) {
             for (const r of usedRanges) {
                 const overlapStart = Math.max(start, r.start);
                 const overlapEnd = Math.min(end, r.end);
                 if (overlapStart < overlapEnd) {
-                    const overlap = overlapEnd - overlapStart;
-                    const duration = end - start;
-                    if (overlap / duration > maxOverlapRatio) return true;
+                    if ((overlapEnd - overlapStart) / (end - start) > maxOverlapRatio) return true;
                 }
             }
             return false;
@@ -1676,88 +1657,7 @@
             return Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 5).map(e => e[0]);
         }
 
-        // ==================== 智能匹配：画面描述 ↔ 文案段落 ====================
-        function matchCopyToScenes(copyParagraphs, frameDescriptions, totalDuration, targetDuration) {
-            const matches = [];
-            const numParagraphs = copyParagraphs.length;
-            // 每段时长 = 目标总时长 / 段落数，15~50秒
-            const clipDuration = Math.max(15, Math.min(50, targetDuration / numParagraphs));
-            const searchStep = Math.max(3, Math.floor(clipDuration / 4));
-
-            const usedRanges = [];
-
-            // 预先对有效画面描述建立索引，加速搜索
-            const validFrames = frameDescriptions.filter(f =>
-                f && f.description &&
-                !f.description.includes('[画面提取失败]') &&
-                !f.description.includes('[AI 分析失败]') &&
-                !f.description.includes('[AI错误]') &&
-                !f.description.includes('[请求失败]')
-            );
-
-            let usedFrameIdx = 0;
-
-            copyParagraphs.forEach((para, paraIdx) => {
-                const paraKeywords = extractKeywords(para);
-                let bestTime = (paraIdx / numParagraphs) * totalDuration;
-                let bestScore = -Infinity;
-                let bestFrameDesc = '无画面信息';
-                let bestMethod = 'keyword';
-
-                // 在有效画面描述中搜索最佳匹配
-                for (let fi = 0; fi < validFrames.length; fi++) {
-                    const fd = validFrames[fi];
-                    const clipStart = Math.max(0, fd.time - clipDuration * 0.4);
-                    const clipEnd = Math.min(totalDuration, clipStart + clipDuration);
-
-                    // 跳过重叠过多的位置
-                    if (isRangeOverlapping(clipStart, clipEnd, usedRanges, 0.3)) continue;
-
-                    // AI视觉评分：关键词 vs 画面描述
-                    const visionScore = keywordOverlapScore(paraKeywords, fd.description);
-
-                    // 位置评分
-                    const idealPos = paraIdx / numParagraphs;
-                    const actualPos = (clipStart + clipDuration / 2) / totalDuration;
-                    const posScore = (1 - Math.abs(idealPos - actualPos)) * 15;
-
-                    const totalScore = visionScore * 3 + posScore;
-
-                    if (totalScore > bestScore) {
-                        bestScore = totalScore;
-                        bestTime = clipStart;
-                        bestFrameDesc = fd.description;
-                        bestMethod = visionScore > 0 ? 'ai_vision' : 'keyword';
-                        usedFrameIdx = fi;
-                    }
-                }
-
-                const startTime = bestTime;
-                const endTime = Math.min(totalDuration, bestTime + clipDuration);
-                usedRanges.push({ start: startTime, end: endTime });
-
-                matches.push({
-                    paragraphIndex: paraIdx,
-                    text: para.substring(0, 80) + (para.length > 80 ? '...' : ''),
-                    startTime,
-                    endTime,
-                    keywords: paraKeywords,
-                    frameDesc: bestFrameDesc,
-                    frameTime: startTime,
-                    method: bestMethod,
-                    score: bestScore,
-                });
-            });
-
-            // 按时间顺序排列
-            matches.sort((a, b) => a.startTime - b.startTime);
-
-            const totalClipTime = matches.reduce((sum, m) => sum + (m.endTime - m.startTime), 0);
-            const aiCount = matches.filter(m => m.method === 'ai_vision').length;
-            console.log(`🎬 AI视觉剪辑：${numParagraphs}段 × 约${Math.round(clipDuration)}秒 = 约${Math.round(totalClipTime / 60)}分钟（AI匹配 ${aiCount}/${numParagraphs}）`);
-
-            return matches;
-        }
+        // matchCopyToScenes 已合并到 matchClipsToAudio（TTS驱动）
 
         function keywordOverlapScore(keywords, description) {
             if (!description) return 0;
@@ -1777,7 +1677,7 @@
             const container = document.getElementById('timelineItems');
             const totalClipDuration = matches.reduce((s, m) => s + (m.endTime - m.startTime), 0);
             container.innerHTML = `<div style="background:var(--surface2);border-radius:8px;padding:10px 14px;margin-bottom:10px;border:1px solid var(--accent);opacity:0.9;">
-                <span style="font-size:13px;">🎬 <b>${matches.length}</b> 个精选片段 · 总时长约 <b style="color:var(--accent);">${formatTime(totalClipDuration)}</b> · 原片 <span style="color:var(--text2);">${formatTime(totalDuration)}</span> → 浓缩为 <b style="color:var(--green);">${Math.round(totalClipDuration / totalDuration * 100)}%</b></span>
+                <span style="font-size:13px;">🎙️ <b>${matches.length}</b> 句解说 · 配音总时长 <b style="color:var(--accent);">${formatTime(totalClipDuration)}</b> · 原片 <span style="color:var(--text2);">${formatTime(totalDuration)}</span> → 浓缩为 <b style="color:var(--green);">${Math.round(totalClipDuration / totalDuration * 100)}%</b></span>
             </div>`;
 
             matches.forEach((m, i) => {
@@ -1793,7 +1693,7 @@
                 div.style.cssText = 'background:var(--surface2);border-radius:8px;padding:10px 12px;border-left:3px solid var(--accent);';
                 div.innerHTML = `
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-                        <span style="font-size:12px;font-weight:600;">📝 段落 ${i + 1}</span>
+                        <span style="font-size:12px;font-weight:600;">🎙️ 句子 ${i + 1}</span>
                         <span style="font-size:11px;color:var(--accent);">⏱ ${formatTime(m.startTime)} ~ ${formatTime(m.endTime)}</span>
                     </div>
                     <div style="font-size:12px;color:var(--text);margin-bottom:4px;">${m.text}</div>
@@ -2324,8 +2224,7 @@
 
         function confirmCopyAndEdit() {
             if (!APP_STATE.generatedCopy) { showToast('请先生成文案', 'error'); return; }
-            const targetDuration = getTargetDuration();
-            startEditing(APP_STATE.generatedCopy, targetDuration);
+            startEditing(APP_STATE.generatedCopy);
         }
 
         function editGeneratedCopy() {
@@ -2356,14 +2255,23 @@
         }
 
         // ==================== AI剪辑流程 ====================
-        function startEditing(copywriting, targetDuration) {
+        function startEditing(copywriting) {
             if (!APP_STATE.uploadedFile) { showToast('请先上传电影文件', 'error'); return; }
-            targetDuration = targetDuration || 900; // default 15 minutes
 
-            APP_STATE.targetDuration = targetDuration;
             APP_STATE.isEditing = true;
             APP_STATE.editCompleted = false;
             APP_STATE.editProgress = 0;
+
+            // 按句子拆分文案，估算 TTS 配音时长（中文约 4 字/秒）
+            const sentences = copywriting.split(/[。！？\n]+/).filter(s => s.trim().length > 3);
+            if (sentences.length === 0) sentences.push(copywriting);
+            const ttsTimeline = sentences.map(s => ({
+                text: s.trim(),
+                duration: Math.max(2, s.trim().length * 0.25 + 0.5), // 每字约0.25秒，加0.5秒停顿
+            }));
+            const totalTTSSec = ttsTimeline.reduce((s, t) => s + t.duration, 0);
+            APP_STATE.ttsTimeline = ttsTimeline;
+            APP_STATE.targetDuration = Math.ceil(totalTTSSec);
 
             // 隐藏之前的结果
             document.getElementById('completeBox').classList.remove('show');
@@ -2384,11 +2292,8 @@
 
             updateProgress(0, '准备中...', 0);
 
-            // 解析文案段落
-            const paragraphs = copywriting.split(/\n\n+/).filter(p => p.trim().length > 0);
-            if (paragraphs.length === 0) {
-                paragraphs.push(copywriting);
-            }
+            // 使用 ttsTimeline（已在上面按句子拆分并估算TTS时长）
+            const clipUnits = APP_STATE.ttsTimeline; // [{text, duration}, ...]
 
             const visionConfig = getVisionConfig();
             const movieName = APP_STATE.uploadedFile.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ').replace(/\[\d+\]/g, '').trim() || '这部电影';
@@ -2434,10 +2339,10 @@
                 document.getElementById('step3').classList.add('active');
 
                 if (frameDescriptions && frameDescriptions.length > 0) {
-                    matches = matchCopyToScenes(paragraphs, frameDescriptions, totalDuration, targetDuration);
+                    matches = matchClipsToAudio(clipUnits, frameDescriptions, totalDuration);
                 } else {
                     const frameCount = frames ? frames.totalFrames : Math.floor(totalDuration / 8);
-                    matches = keywordBasedMatching(paragraphs, totalDuration, targetDuration, frameCount);
+                    matches = matchClipsToAudio(clipUnits, null, totalDuration, frameCount);
                 }
 
                 document.getElementById('step3').classList.add('done');
@@ -2471,9 +2376,9 @@
 
                         const totalClipDuration = matches.reduce((s, m) => s + (m.endTime - m.startTime), 0);
                         const visionUsed = frameDescriptions && frameDescriptions.length > 0;
-                        showToast('🎉 剪辑完成！' + matches.length + ' 段精选，总长约 ' + formatTime(totalClipDuration) + '（' + (visionUsed ? 'AI视觉匹配' : '智能匹配') + '）', 'success');
+                        showToast('🎉 剪辑完成！' + matches.length + ' 句文案匹配片段，总长约 ' + formatTime(totalClipDuration) + '（配音驱动）', 'success');
                         document.getElementById('progressText').textContent =
-                            `✅ AI 已从全片精选出 ${matches.length} 个片段，总时长约 ${formatTime(totalClipDuration)}（目标 ${formatTime(targetDuration)}）`;
+                            `✅ AI 已为 ${matches.length} 句文案匹配画面片段，总时长约 ${formatTime(totalClipDuration)}（由TTS配音时长决定）`;
                     }, 1000);
                 }, 800);
             })();
