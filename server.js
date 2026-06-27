@@ -286,7 +286,7 @@ function formatTime(seconds) {
 
 // ==================== 启动 ====================
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🎬 AI 视频渲染后端运行在端口 ${PORT}`);
   console.log(`   TTS 引擎: Microsoft Edge TTS (免费)`);
   console.log(`   POST /api/render  - 视频渲染`);
