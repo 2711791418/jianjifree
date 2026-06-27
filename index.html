@@ -1555,6 +1555,89 @@
             }
         }
 
+        // ==================== 区域内按需截图（无数量上限） ====================
+        async function extractVideoFramesInRange(videoFile, startSec, endSec, numFrames) {
+            if (numFrames <= 0) return [];
+            const interval = (endSec - startSec) / numFrames;
+            return new Promise((resolve, reject) => {
+                const video = document.createElement('video');
+                video.preload = 'metadata';
+                video.muted = true;
+                const url = URL.createObjectURL(videoFile);
+                video.src = url;
+
+                video.onloadedmetadata = async function() {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    const scale = Math.min(1, 480 / video.videoWidth);
+                    canvas.width = video.videoWidth * scale;
+                    canvas.height = video.videoHeight * scale;
+
+                    const frames = [];
+                    for (let i = 0; i < numFrames; i++) {
+                        const t = Math.min(startSec + i * interval + interval * 0.3, endSec - 0.1);
+                        if (t >= endSec) break;
+                        try {
+                            await seekTo(video, t);
+                            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                            frames.push({ time: t, base64: canvas.toDataURL('image/jpeg', 0.5), index: i });
+                        } catch (e) {
+                            frames.push({ time: t, base64: null, index: i, error: true });
+                        }
+                    }
+                    URL.revokeObjectURL(url);
+                    resolve(frames);
+                };
+                video.onerror = () => { URL.revokeObjectURL(url); resolve([]); };
+            });
+        }
+
+        // ==================== AI 视觉验证 + 精确边界检测 ====================
+        async function aiVerifyRegion(regionFrames, sentenceText, storyMatch) {
+            const validFrames = regionFrames.filter(f => !f.error && f.base64);
+            if (validFrames.length === 0) return null;
+
+            const config = getVisionConfig();
+            const logDiv = document.getElementById('visionLog');
+            logDiv.style.display = 'block';
+
+            try {
+                // 第一步：10s间隔粗验证 → 如果不够就5s → 还不够就实际间隔
+                const resp = await fetch('/api/match-frames', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        provider: config.provider,
+                        model: config.model,
+                        frames: validFrames.map(f => ({ time: f.time, base64: f.base64, index: f.index })),
+                        sentences: [{ index: 0, text: sentenceText, duration: storyMatch.endTime - storyMatch.startTime }],
+                    }),
+                });
+
+                if (!resp.ok) return null;
+                const data = await resp.json();
+                if (!data.success || !data.results || data.results.length === 0) return null;
+
+                const best = data.results[0];
+                // 如果AI匹配的片段时长大于解说词语音时长，裁剪多余部分
+                const ttsDuration = storyMatch.endTime - storyMatch.startTime;
+                const matchedDuration = best.endTime - best.startTime;
+                const finalEnd = matchedDuration > ttsDuration ? best.startTime + ttsDuration : best.endTime;
+
+                logDiv.innerHTML += `<div style="color:var(--green);font-size:11px;">✅ 视觉验证：${formatTime(best.startTime)}~${formatTime(finalEnd)}（原匹配${formatTime(storyMatch.startTime)}~${formatTime(storyMatch.endTime)}）${best.reason || ''}</div>`;
+                logDiv.scrollTop = logDiv.scrollHeight;
+
+                return {
+                    ...storyMatch,
+                    startTime: best.startTime,
+                    endTime: finalEnd,
+                    reason: (storyMatch.reason || '') + ' 👁️已验证',
+                };
+            } catch (e) {
+                return null;
+            }
+        }
+
         // ==================== AI 智能匹配：看完所有画面+文案，直接返回帧映射 ====================
         async function aiMatchFramesToSentences(frames, clipUnits, provider, model) {
             const logDiv = document.getElementById('visionLog');
@@ -2403,7 +2486,6 @@
                         if (transData.success && transData.transcript && transData.transcript.length > 0) {
                             updateProgress(20, `已提取 ${transData.transcript.length} 条音频文本，AI 正在分章节匹配...`, 2);
 
-                            // AI: 分章节 + 匹配解说词
                             const matchResp = await fetch('/api/story-match', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
@@ -2425,9 +2507,9 @@
                                 document.getElementById('step2').classList.add('done');
                                 updateProgress(30, '故事匹配失败，降级到画面匹配', 2);
                             }
-                        } else if (transData.hasEmbeddedSubtitles === false) {
+                        } else {
                             document.getElementById('step2').classList.add('done');
-                            updateProgress(25, '无字幕且未配置ASR，使用画面匹配', 2);
+                            updateProgress(25, '无字幕/音频文本，使用画面匹配', 2);
                         }
                     } catch (e) {
                         document.getElementById('step2').classList.add('done');
@@ -2438,38 +2520,74 @@
                     updateProgress(20, '未配置后端/文本AI，跳过文字分析', 2);
                 }
 
-                // ---- 步骤3：画面匹配（有视觉AI时；如果有story matches则作为精调）----
+                // ---- 步骤3：画面精调 ----
+                // 有 storyMatches → 在匹配到的区域内截图验证（无上限，按需截取）
+                // 无 storyMatches 有视觉AI → 全片抽帧匹配
                 let aiResults = null;
 
-                if (hasVisionAI && !storyMatches) {
-                    // 无文字匹配 → 视觉AI密集抽帧匹配
-                    updateProgress(28, '正在密集提取视频画面...', 3);
+                if (storyMatches && storyMatches.length > 0 && hasVisionAI) {
+                    // 文字已匹配 → 在每个候选区域内截图验证 + 精确边界
                     document.getElementById('step3').classList.add('active');
-                    try {
-                        const denseFrames = await extractVideoFrames(APP_STATE.uploadedFile, 2, 120, 0.5, 480);
-                        totalDuration = denseFrames.duration || totalDuration;
-                        updateProgress(35, `已提取 ${denseFrames.totalFrames} 张画面，AI分析中...`, 3);
-                        aiResults = await aiMatchFramesToSentences(denseFrames.frames, clipUnits, visionConfig.provider, visionConfig.model);
-                        if (aiResults && aiResults.length > 0) {
-                            updateProgress(55, `AI 匹配 ${aiResults.length} 句`, 3);
+                    updateProgress(45, '在匹配区域截图进行视觉验证...', 3);
+
+                    const refinedMatches = [];
+                    for (let mi = 0; mi < storyMatches.length; mi++) {
+                        const sm = storyMatches[mi];
+                        const regionStart = sm.startTime;
+                        const regionEnd = sm.endTime;
+                        const regionDuration = regionEnd - regionStart;
+                        updateProgress(45 + Math.floor(mi / storyMatches.length * 20), `验证片段 ${mi + 1}/${storyMatches.length}...`, 3);
+
+                        // 在区域内按需截图（间隔由区域大小决定）
+                        const searchInterval = regionDuration <= 30 ? 1 : (regionDuration <= 120 ? 5 : 10);
+                        const numFrames = Math.ceil(regionDuration / searchInterval);
+                        // 不设上限，按实际需要截取
+                        const regionFrames = await extractVideoFramesInRange(
+                            APP_STATE.uploadedFile, regionStart, regionEnd, numFrames
+                        );
+
+                        if (regionFrames && regionFrames.length > 0) {
+                            // 发送给视觉AI验证
+                            const verified = await aiVerifyRegion(
+                                regionFrames, clipUnits[sm.commentaryIdx]?.text || '', sm
+                            );
+                            if (verified) {
+                                refinedMatches.push(verified);
+                            } else {
+                                refinedMatches.push(sm); // 视觉验证失败，用原文匹配
+                            }
+                        } else {
+                            refinedMatches.push(sm);
                         }
+                    }
+                    storyMatches = refinedMatches;
+                    document.getElementById('step3').classList.add('done');
+                    updateProgress(65, `画面精调完成，${refinedMatches.length} 个片段已验证`, 3);
+                } else if (!storyMatches && hasVisionAI) {
+                    // 无文字匹配 → 全片抽帧
+                    document.getElementById('step3').classList.add('active');
+                    updateProgress(30, '全片抽帧进行AI画面匹配...', 3);
+                    try {
+                        const denseFrames = await extractVideoFrames(APP_STATE.uploadedFile, 2, 999, 0.5, 480);
+                        totalDuration = denseFrames.duration || totalDuration;
+                        updateProgress(38, `已提取 ${denseFrames.totalFrames} 张画面，AI分析中...`, 3);
+                        aiResults = await aiMatchFramesToSentences(denseFrames.frames, clipUnits, visionConfig.provider, visionConfig.model);
                     } catch (e) {
-                        updateProgress(40, '视觉AI不可用', 3);
+                        updateProgress(45, '视觉AI不可用', 3);
                     }
                     document.getElementById('step3').classList.add('done');
-                } else if (storyMatches) {
+                } else {
                     document.getElementById('step3').classList.add('done');
-                    updateProgress(50, '已通过文字分析精确匹配，跳过画面扫描', 3);
+                    updateProgress(50, storyMatches ? '文字匹配完成' : '使用关键词匹配', 3);
                 }
 
                 // ---- 步骤4：生成最终时间线 ----
-                updateProgress(60, '正在生成剪辑时间线...', 3);
+                updateProgress(70, '正在生成剪辑时间线...', 4);
                 if (!document.getElementById('step3').classList.contains('done')) {
-                    document.getElementById('step3').classList.add('active');
+                    document.getElementById('step3').classList.add('done');
                 }
 
                 if (storyMatches && storyMatches.length > 0) {
-                    // 优先用文字匹配结果（最精确）
                     matches = storyMatches.map((m, i) => ({
                         text: (clipUnits[m.commentaryIdx] || clipUnits[i] || {}).text || '',
                         startTime: m.startTime,
