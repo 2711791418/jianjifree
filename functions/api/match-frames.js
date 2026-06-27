@@ -34,72 +34,54 @@ export async function onRequestPost({ request, env }) {
       `[句${i}] ${s.text}（配音约${s.duration.toFixed(1)}秒）`
     ).join('\n');
 
-    const MAX_IMAGES_PER_CALL = 10; // 视觉AI单次请求图片上限
+    const MAX_IMAGES_PER_CALL = 15;
     const totalBatches = Math.ceil(frames.length / MAX_IMAGES_PER_CALL);
 
-    // 分批发送，每批最多10张图
-    const allFrameDescs = [];
+    // 并行发送所有批次（避免串行超时）
+    const batchPromises = [];
     for (let batch = 0; batch < totalBatches; batch++) {
       const batchFrames = frames.slice(batch * MAX_IMAGES_PER_CALL, (batch + 1) * MAX_IMAGES_PER_CALL);
       const validFrames = batchFrames.filter(f => f.base64);
-
       if (validFrames.length === 0) continue;
 
-      const batchPrompt = `你是一位电影画面分析师。下面是电影第${batch * MAX_IMAGES_PER_CALL + 1}到${Math.min((batch + 1) * MAX_IMAGES_PER_CALL, frames.length)}张关键帧截图（共${frames.length}张，时间范围 ${formatSec(frames[0]?.time || 0)} ~ ${formatSec(frames[frames.length-1]?.time || 0)}）。
-
-请用一句话描述每张画面的内容（场景、人物、动作、情绪）。输出纯 JSON 数组：
-[{"idx": 帧序号, "desc": "画面描述（15字内）"}, ...]
-
-只输出 JSON 数组，不要其他文字。`;
-
+      const batchPrompt = `描述每张画面的内容（场景、人物、情绪）。输出JSON：[{"idx":帧号,"desc":"描述"},...]`;
       const userContent = [{ type: 'text', text: batchPrompt }];
       for (const f of validFrames) {
-        const base64Data = f.base64.split(',')[1] || f.base64;
-        userContent.push({
-          type: 'image_url',
-          image_url: { url: `data:image/jpeg;base64,${base64Data}` },
-        });
+        const b64 = f.base64.split(',')[1] || f.base64;
+        userContent.push({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${b64}` } });
       }
 
-      try {
-        const aiResp = await fetch(endpoint, {
+      batchPromises.push(
+        fetch(endpoint, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            model: modelName,
-            messages: [
-              { role: 'user', content: userContent },
-            ],
-            max_tokens: 2048,
-            temperature: 0.3,
-          }),
-        });
-
-        if (aiResp.ok) {
-          const data = await aiResp.json();
-          const raw = (data.choices?.[0]?.message?.content || '').replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-          try {
-            const descs = JSON.parse(raw);
-            if (Array.isArray(descs)) {
-              descs.forEach(d => {
-                allFrameDescs.push({ index: d.idx ?? d.i ?? batch * MAX_IMAGES_PER_CALL, desc: d.desc || d.description || '', time: frames[d.idx]?.time || 0 });
-              });
-            }
-          } catch {}
-        }
-      } catch (e) {
-        allFrameDescs.push({ index: batch * MAX_IMAGES_PER_CALL, desc: `[批次${batch}API异常]`, time: 0 });
-      }
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+          body: JSON.stringify({ model: modelName, messages: [{ role: 'user', content: userContent }], max_tokens: 1024, temperature: 0.3 }),
+        }).then(async r => {
+          if (!r.ok) return [];
+          const d = await r.json();
+          const raw = (d.choices?.[0]?.message?.content || '').replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+          try { return JSON.parse(raw); } catch { return []; }
+        }).catch(() => [])
+      );
     }
+
+    // 等待所有批次完成（并行，总耗时 = 单批耗时）
+    const batchResults = await Promise.all(batchPromises);
+    const allFrameDescs = [];
+    batchResults.forEach((descs, bi) => {
+      if (Array.isArray(descs)) {
+        descs.forEach(d => {
+          const idx = d.idx ?? d.i ?? bi * MAX_IMAGES_PER_CALL;
+          allFrameDescs.push({ index: idx, desc: d.desc || d.description || '', time: frames[idx]?.time || 0 });
+        });
+      }
+    });
 
     if (allFrameDescs.length === 0) {
       return Response.json({
         success: false,
-        error: `所有 ${totalBatches} 批次视觉分析均失败。可能原因：1) API Key 无视觉模型权限 2) 模型名不支持视觉 3) 图片过大`,
-        hint: '如使用通义千问，确认 Key 已开通视觉模型(qwen-vl-plus)；如使用DeepSeek，它不支持图片识别',
+        error: `${totalBatches} 批次全部失败。可能：1) API Key 未开通视觉模型 2) 模型名错误`,
+        hint: '去 dashscope.aliyun.com → 百炼 → 模型广场 → 搜 qwen-vl-plus → 确认已开通',
       }, { status: 500 });
     }
 
