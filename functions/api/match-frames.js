@@ -34,48 +34,50 @@ export async function onRequestPost({ request, env }) {
       `[句${i}] ${s.text}（配音约${s.duration.toFixed(1)}秒）`
     ).join('\n');
 
-    const MAX_IMAGES_PER_CALL = 15;
+    const MAX_IMAGES_PER_CALL = 20;
+    const CONCURRENT_BATCHES = 3; // Cloudflare 并发限制
     const totalBatches = Math.ceil(frames.length / MAX_IMAGES_PER_CALL);
 
-    // 并行发送所有批次（避免串行超时）
-    const batchPromises = [];
-    for (let batch = 0; batch < totalBatches; batch++) {
-      const batchFrames = frames.slice(batch * MAX_IMAGES_PER_CALL, (batch + 1) * MAX_IMAGES_PER_CALL);
-      const validFrames = batchFrames.filter(f => f.base64);
-      if (validFrames.length === 0) continue;
-
-      const batchPrompt = `描述每张画面的内容（场景、人物、情绪）。输出JSON：[{"idx":帧号,"desc":"描述"},...]`;
-      const userContent = [{ type: 'text', text: batchPrompt }];
-      for (const f of validFrames) {
-        const b64 = f.base64.split(',')[1] || f.base64;
-        userContent.push({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${b64}` } });
-      }
-
-      batchPromises.push(
-        fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-          body: JSON.stringify({ model: modelName, messages: [{ role: 'user', content: userContent }], max_tokens: 1024, temperature: 0.3 }),
-        }).then(async r => {
-          if (!r.ok) return [];
-          const d = await r.json();
-          const raw = (d.choices?.[0]?.message?.content || '').replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-          try { return JSON.parse(raw); } catch { return []; }
-        }).catch(() => [])
-      );
-    }
-
-    // 等待所有批次完成（并行，总耗时 = 单批耗时）
-    const batchResults = await Promise.all(batchPromises);
     const allFrameDescs = [];
-    batchResults.forEach((descs, bi) => {
-      if (Array.isArray(descs)) {
-        descs.forEach(d => {
-          const idx = d.idx ?? d.i ?? bi * MAX_IMAGES_PER_CALL;
-          allFrameDescs.push({ index: idx, desc: d.desc || d.description || '', time: frames[idx]?.time || 0 });
-        });
+
+    // 分组并行：每次 CONCURRENT_BATCHES 批并发，组间串行（避免超 subrequest 限制）
+    for (let group = 0; group < totalBatches; group += CONCURRENT_BATCHES) {
+      const groupPromises = [];
+      for (let batch = group; batch < Math.min(group + CONCURRENT_BATCHES, totalBatches); batch++) {
+        const batchFrames = frames.slice(batch * MAX_IMAGES_PER_CALL, (batch + 1) * MAX_IMAGES_PER_CALL);
+        const validFrames = batchFrames.filter(f => f.base64);
+        if (validFrames.length === 0) continue;
+
+        const prompt = `描述每张画面内容（场景、人物、情绪）。输出JSON：[{"idx":帧号,"desc":"描述"},...] 只输出JSON。`;
+        const content = [{ type: 'text', text: prompt }];
+        for (const f of validFrames) {
+          content.push({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${f.base64.split(',')[1] || f.base64}` } });
+        }
+
+        groupPromises.push(
+          fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+            body: JSON.stringify({ model: modelName, messages: [{ role: 'user', content }], max_tokens: 1024, temperature: 0.3 }),
+          }).then(async r => {
+            if (!r.ok) return [];
+            const d = await r.json();
+            const raw = (d.choices?.[0]?.message?.content || '').replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+            try { return { batch, descs: JSON.parse(raw) }; } catch { return { batch, descs: [] }; }
+          }).catch(() => ({ batch, descs: [] }))
+        );
       }
-    });
+
+      const groupResults = await Promise.all(groupPromises);
+      groupResults.forEach(r => {
+        if (r && Array.isArray(r.descs)) {
+          r.descs.forEach(d => {
+            const idx = d.idx ?? d.i ?? r.batch * MAX_IMAGES_PER_CALL;
+            allFrameDescs.push({ index: idx, desc: d.desc || d.description || '', time: frames[idx]?.time || 0 });
+          });
+        }
+      });
+    }
 
     if (allFrameDescs.length === 0) {
       return Response.json({
